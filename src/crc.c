@@ -47,20 +47,20 @@ static void parse_args( int argc, char** argv )
       {
         if( !ignore_poly )
         {
-					parsed_number = try_strtol( optarg );
-					switch( parsed_number )
+          parsed_number = try_strtol( optarg );
+          switch( parsed_number )
           {
-						/* supported polynomials by now */
-						case  3:
-						case  8:
-						case 16:
-						case 32:
-						case 64:
-							polynomial_degree = ( uint8_t )parsed_number;
-							poly_count++;
-							break;
+            /* supported polynomials by now */
+            case  3:
+            case  8:
+            case 16:
+            case 32:
+            case 64:
+              polynomial_degree = ( uint8_t )parsed_number;
+              poly_count++;
+              break;
           }
-					ignore_poly++;
+          ignore_poly++;
         }
         else
         {
@@ -72,11 +72,11 @@ static void parse_args( int argc, char** argv )
       {
         if( !ignore_file )
         {
-					( void )strncpy( ( char* )&file[ 0 ], optarg, PATH_MAX );
-					if( !access( ( const char* )&file[ 0 ], F_OK ) )
-					{
-					  file_count++;
-					}
+          ( void )strncpy( ( char* )&file[ 0 ], optarg, PATH_MAX );
+          if( !access( ( const char* )&file[ 0 ], F_OK ) )
+          {
+            file_count++;
+          }
           ignore_file++;
         }
         else
