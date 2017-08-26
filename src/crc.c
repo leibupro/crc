@@ -9,6 +9,8 @@
 #include <linux/limits.h>
 
 #define DEF_CRC_MODE 32
+#define FILE_BUF_SIZE ( 128UL * 1024UL * 1024UL )
+
 
 static uint8_t polynomial_degree = 0x00;
 /* the +1 is to assure that the path string is always 0 terminated. */
@@ -21,7 +23,15 @@ static void print_usage( FILE* out );
 
 static void print_usage( FILE* out )
 {
-  ( void )fprintf( out, "print usage ...\n" );
+  ( void )fprintf( out, "\nUsage: \n"
+                        " crc [-w crc_polynomial_degree] -f ./valid/file/path\n\n"
+                        "=====================================================\n"
+                        " Example: crc -w 32 -f /boot/vmlinuz-4.9.0-3-amd64\n" 
+                        "=====================================================\n\n"
+                        "   -w   CRC Polynomial degree / Checksum width\n"
+                        "        Default vlaue is 32 (CRC32).\n" 
+                        "   -f   Valid path (relative or absolute)\n"
+                        "        to an input file.\n\n" );
 }
 
 
