@@ -4,12 +4,27 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <errno.h>
 #include <stdio.h>
+
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include <linux/limits.h>
 
 #define DEF_CRC_MODE 32
-#define FILE_BUF_SIZE ( 128UL * 1024UL * 1024UL )
+/* #define FILE_BUF_SIZE ( 128UL * 1024UL * 1024UL ) */
+#define FILE_BUF_SIZE ( 1UL )
+
+/* CRC polynomial coefficients */
+#define POLY_3  0x000000000000000BUL
+#define POLY_8  0x000000000000000BUL
+#define POLY_16 0x000000000000000BUL
+#define POLY_32 0x000000000000000BUL
+#define POLY_64 0x000000000000000BUL
+
+#define BYTES_TO_BIT 8UL
 
 
 static uint8_t polynomial_degree = 0x00;
@@ -19,6 +34,7 @@ static uint8_t file[ PATH_MAX + 1 ] = { 0x00 };
 
 static void parse_args( int argc, char** argv );
 static void print_usage( FILE* out );
+static void calculate_crc( void );
 
 
 static void print_usage( FILE* out )
@@ -120,9 +136,50 @@ static void parse_args( int argc, char** argv )
 }
 
 
+static void calculate_crc( void )
+{
+	uint8_t* file_buf = NULL;
+  int fd = ( -1 );
+  struct stat file_stat;
+  uint64_t file_size_byte = 0;
+  uint64_t file_size_bit  = 0;
+	
+	if( !( file_buf = ( uint8_t* )malloc( FILE_BUF_SIZE * sizeof( uint8_t ) ) ) )
+  {
+		( void )fprintf( stderr, "Failed to allocate workspace memory.\n" );
+    exit( EXIT_FAILURE );
+  }
+
+  if( ( fd = open( ( const char* )file, O_RDONLY ) ) == ( -1 ) )
+  {
+    ( void )fprintf( stderr, "%s\n", strerror( errno ) );
+    goto exit_fail;
+  }
+
+  if( stat( ( const char* )file, &file_stat ) )
+  {
+    ( void )fprintf( stderr, "%s\n", strerror( errno ) );
+    goto exit_fail;
+  }
+  file_size_byte = file_stat.st_size;
+  file_size_bit  = file_size_byte * BYTES_TO_BIT;
+  ( void )fprintf( stdout, "\nThe input file has a size of %ld bytes (%ld bit).\n", 
+                           file_size_byte,
+                           file_size_bit );
+
+  return;
+	exit_fail:
+    free( ( void* )file_buf );
+    file_buf = NULL;
+    ( void )close( fd );
+    exit( EXIT_FAILURE );
+}
+
+
 int main( int argc, char** argv )
 {
   parse_args( argc, argv );
+  calculate_crc();
   return EXIT_SUCCESS;
 }
 
