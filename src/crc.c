@@ -14,15 +14,40 @@
 #include <linux/limits.h>
 
 #define DEF_CRC_MODE 32
-/* #define FILE_BUF_SIZE ( 128UL * 1024UL * 1024UL ) */
-#define FILE_BUF_SIZE ( 1UL )
+#define FILE_BUF_SIZE ( 64UL * 1024UL * 1024UL )
 
-/* CRC polynomial coefficients */
-#define POLY_3  0x000000000000000BUL
-#define POLY_8  0x000000000000000BUL
-#define POLY_16 0x000000000000000BUL
-#define POLY_32 0x000000000000000BUL
-#define POLY_64 0x000000000000000BUL
+/* CRC polynomial coefficients 
+ * OK, these polynomials were taken from this source: 
+ * https://en.wikipedia.org/wiki/Polynomial_representations_of_cyclic_redundancy_checks
+ * The omission of the high-order bit was not applied here.
+ * We have an extra byte for the odd bit.
+ *
+ * E. g.:
+ * CRC32, given polynomial coefficients: 0x04C11DB7
+ * Added a 1 for the first bit (x^32): 0x104C11DB7
+ * Left shift of seven bit: 0x82608EDB80
+ */
+
+static uint8_t poly_3[]       = { 0xB0U };
+static uint8_t poly_3_mask[]  = { 0xE0U };
+
+static uint8_t poly_8[]       = { 0xEAU, 0x80U };
+static uint8_t poly_8_mask[]  = { 0xFFU, 0x80U };
+
+/* CRC-16-CCITT */
+static uint8_t poly_16[]      = { 0x88U, 0x10U, 0x80U };
+static uint8_t poly_16_mask[] = { 0xFFU, 0xFFU, 0x80U };
+
+/* CRC-32 */
+static uint8_t poly_32[]      = { 0x82U, 0x60U, 0x8EU, 0xDBU, 0x80U };
+static uint8_t poly_32_mask[] = { 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0x80U };
+
+/* CRC-64-ISO */
+static uint8_t poly_64[]      = { 0x80U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x0DU, 0x80U };
+static uint8_t poly_64_mask[] = { 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0x80U };
+
+/* polynomials can be accessed with the polynomial_degree as index */
+static uint8_t* polynomials[ 65 ][ 2 ];
 
 #define BYTES_TO_BIT 8UL
 
@@ -34,6 +59,7 @@ static uint8_t file[ PATH_MAX + 1 ] = { 0x00 };
 
 static void parse_args( int argc, char** argv );
 static void print_usage( FILE* out );
+static void init_polynomials( void );
 static void calculate_crc( void );
 
 
@@ -48,6 +74,25 @@ static void print_usage( FILE* out )
                         "        Default vlaue is 32 (CRC32).\n" 
                         "   -f   Valid path (relative or absolute)\n"
                         "        to an input file.\n\n" );
+}
+
+
+static void init_polynomials( void )
+{
+  polynomials[  3 ][ 0 ] = &poly_3[ 0 ];
+  polynomials[  3 ][ 1 ] = &poly_3_mask[ 0 ];
+  
+  polynomials[  8 ][ 0 ] = &poly_8[ 0 ];
+  polynomials[  8 ][ 1 ] = &poly_8_mask[ 0 ];
+  
+  polynomials[ 16 ][ 0 ] = &poly_16[ 0 ];
+  polynomials[ 16 ][ 1 ] = &poly_16_mask[ 0 ];
+  
+  polynomials[ 32 ][ 0 ] = &poly_32[ 0 ];
+  polynomials[ 32 ][ 1 ] = &poly_32_mask[ 0 ];
+  
+  polynomials[ 64 ][ 0 ] = &poly_64[ 0 ];
+  polynomials[ 64 ][ 1 ] = &poly_64_mask[ 0 ];
 }
 
 
@@ -138,13 +183,35 @@ static void parse_args( int argc, char** argv )
 
 static void calculate_crc( void )
 {
-	uint8_t* file_buf = NULL;
+	uint8_t* file_buf     = NULL;
+	uint8_t* poly_buf     = NULL;
+  uint8_t* mask_buf     = NULL;
+  uint8_t* realloc_file = NULL;
+  uint8_t* realloc_poly = NULL;
+  uint8_t* realloc_mask = NULL;
+
   int fd = ( -1 );
   struct stat file_stat;
   uint64_t file_size_byte = 0;
   uint64_t file_size_bit  = 0;
+  ssize_t bytes_read = 0;
+  
+  /* uint is bytes */
+  uint8_t checksum_size = 0x00;
+
+  /* uint is bytes */
+  uint8_t poly_bytes = 0x00;
+
+  uint32_t bytes_to_process = 0x00;
+
+  checksum_size = 
+    ( polynomial_degree / BYTES_TO_BIT == 0 ) ? 1 : ( polynomial_degree / BYTES_TO_BIT );
+  poly_bytes = 
+    ( polynomial_degree / BYTES_TO_BIT == 0 ) ? 1 : ( checksum_size + 1 );
 	
-	if( !( file_buf = ( uint8_t* )malloc( FILE_BUF_SIZE * sizeof( uint8_t ) ) ) )
+	if( !( file_buf = ( uint8_t* )malloc( FILE_BUF_SIZE * sizeof( uint8_t ) ) ) ||
+	    !( poly_buf = ( uint8_t* )calloc( 1, FILE_BUF_SIZE ) ) ||
+	    !( mask_buf = ( uint8_t* )calloc( 1, FILE_BUF_SIZE ) ) )
   {
 		( void )fprintf( stderr, "Failed to allocate workspace memory.\n" );
     exit( EXIT_FAILURE );
@@ -167,10 +234,43 @@ static void calculate_crc( void )
                            file_size_byte,
                            file_size_bit );
 
+  bytes_read = read( fd, ( void* )file_buf, FILE_BUF_SIZE );
+  if( ( long )FILE_BUF_SIZE <= ( long )poly_bytes )
+  {
+    ( void )fprintf( stderr, "File buffer must be greater than polynomial size.\n" );
+    goto exit_fail;
+  }
+  bytes_to_process = FILE_BUF_SIZE - poly_bytes;
+
+  while( 0xFF )
+  {
+    /* we are at the end and can add the checksum bytes */
+    if( lseek( fd, 0, SEEK_CUR ) == lseek( fd, 0, SEEK_END ) )
+    {
+      if( !( realloc_file = 
+               ( uint8_t* )realloc( ( void* )file_buf, 
+                                    poly_bytes + bytes_read + ( ssize_t )checksum_size ) ) ||
+          !( realloc_poly = 
+               ( uint8_t* )realloc( ( void* )poly_buf, 
+                                    poly_bytes + bytes_read + ( ssize_t )checksum_size ) ) ||
+          !( realloc_mask = 
+               ( uint8_t* )realloc( ( void* )mask_buf, 
+                                    poly_bytes + bytes_read + ( ssize_t )checksum_size ) ) )
+      {
+        ( void )fprintf( stderr, "Failed to reallocate memory.\n" );
+        goto exit_fail;
+      }
+      file_buf = realloc_file;
+      poly_buf = realloc_poly;
+      mask_buf = realloc_mask;
+    }
+  }
+
   return;
 	exit_fail:
     free( ( void* )file_buf );
-    file_buf = NULL;
+    free( ( void* )poly_buf );
+    free( ( void* )mask_buf );
     ( void )close( fd );
     exit( EXIT_FAILURE );
 }
@@ -179,6 +279,7 @@ static void calculate_crc( void )
 int main( int argc, char** argv )
 {
   parse_args( argc, argv );
+  init_polynomials();
   calculate_crc();
   return EXIT_SUCCESS;
 }
