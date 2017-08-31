@@ -60,6 +60,7 @@ static uint8_t file[ PATH_MAX + 1 ] = { 0x00 };
 static void parse_args( int argc, char** argv );
 static void print_usage( FILE* out );
 static void init_polynomials( void );
+static void free_resources( int fd, void* file_buf, void* poly_buf, void* mask_buf );
 static void calculate_crc( void );
 
 
@@ -93,6 +94,15 @@ static void init_polynomials( void )
   
   polynomials[ 64 ][ 0 ] = &poly_64[ 0 ];
   polynomials[ 64 ][ 1 ] = &poly_64_mask[ 0 ];
+}
+
+
+static void free_resources( int fd, void* file_buf, void* poly_buf, void* mask_buf )
+{
+  free( file_buf );
+  free( poly_buf );
+  free( mask_buf );
+  ( void )close( fd );
 }
 
 
@@ -186,9 +196,11 @@ static void calculate_crc( void )
 	uint8_t* file_buf     = NULL;
 	uint8_t* poly_buf     = NULL;
   uint8_t* mask_buf     = NULL;
+
   uint8_t* realloc_file = NULL;
   uint8_t* realloc_poly = NULL;
   uint8_t* realloc_mask = NULL;
+  ssize_t realloc_size = 0;
 
   int fd = ( -1 );
   struct stat file_stat;
@@ -203,15 +215,26 @@ static void calculate_crc( void )
   uint8_t poly_bytes = 0x00;
 
   uint32_t bytes_to_process = 0x00;
+  
+  uint32_t file_buf_size = FILE_BUF_SIZE;
+
+  uint8_t first      = 0xFF;
+  uint8_t first_last = 0x00;
+
+  uint8_t file_walker = 0xFF;
+
+  off_t cur_file_pos = 0;
+
+  uint32_t file_piece_no = 0;
 
   checksum_size = 
     ( polynomial_degree / BYTES_TO_BIT == 0 ) ? 1 : ( polynomial_degree / BYTES_TO_BIT );
   poly_bytes = 
     ( polynomial_degree / BYTES_TO_BIT == 0 ) ? 1 : ( checksum_size + 1 );
 	
-	if( !( file_buf = ( uint8_t* )malloc( FILE_BUF_SIZE * sizeof( uint8_t ) ) ) ||
-	    !( poly_buf = ( uint8_t* )calloc( 1, FILE_BUF_SIZE ) ) ||
-	    !( mask_buf = ( uint8_t* )calloc( 1, FILE_BUF_SIZE ) ) )
+	if( !( file_buf = ( uint8_t* )malloc( file_buf_size * sizeof( uint8_t ) ) ) ||
+	    !( poly_buf = ( uint8_t* )calloc( 1, file_buf_size ) ) ||
+	    !( mask_buf = ( uint8_t* )calloc( 1, file_buf_size ) ) )
   {
 		( void )fprintf( stderr, "Failed to allocate workspace memory.\n" );
     exit( EXIT_FAILURE );
@@ -234,28 +257,58 @@ static void calculate_crc( void )
                            file_size_byte,
                            file_size_bit );
 
-  bytes_read = read( fd, ( void* )file_buf, FILE_BUF_SIZE );
-  if( ( long )FILE_BUF_SIZE <= ( long )poly_bytes )
+  if( file_buf_size <= ( uint32_t )poly_bytes )
   {
     ( void )fprintf( stderr, "File buffer must be greater than polynomial size.\n" );
     goto exit_fail;
   }
-  bytes_to_process = FILE_BUF_SIZE - poly_bytes;
 
-  while( 0xFF )
+  if( file_size_byte <= file_buf_size )
   {
-    /* we are at the end and can add the checksum bytes */
-    if( lseek( fd, 0, SEEK_CUR ) == lseek( fd, 0, SEEK_END ) )
+    first_last = 0xFF;
+  }
+
+  do
+  {
+    if( first )
     {
-      if( !( realloc_file = 
-               ( uint8_t* )realloc( ( void* )file_buf, 
-                                    poly_bytes + bytes_read + ( ssize_t )checksum_size ) ) ||
-          !( realloc_poly = 
-               ( uint8_t* )realloc( ( void* )poly_buf, 
-                                    poly_bytes + bytes_read + ( ssize_t )checksum_size ) ) ||
-          !( realloc_mask = 
-               ( uint8_t* )realloc( ( void* )mask_buf, 
-                                    poly_bytes + bytes_read + ( ssize_t )checksum_size ) ) )
+      bytes_read = read( fd, ( void* )file_buf, file_buf_size );
+      first = 0x00;
+    }
+    else
+    {
+      ( void )memmove( ( void* )file_buf, 
+                       ( void* )( file_buf + ( file_buf_size - poly_bytes ) ), 
+                       poly_bytes );
+      ( void )memmove( ( void* )poly_buf, 
+                       ( void* )( poly_buf + ( file_buf_size - poly_bytes ) ), 
+                       poly_bytes );
+      ( void )memmove( ( void* )mask_buf, 
+                       ( void* )( mask_buf + ( file_buf_size - poly_bytes ) ), 
+                       poly_bytes );
+
+      bytes_read = read( fd, 
+                         ( void* )( file_buf + poly_bytes ), 
+                         ( file_buf_size - poly_bytes ) );
+    }
+
+    /* we are at the end and can add the checksum bytes */
+    cur_file_pos = lseek( fd, 0, SEEK_CUR );
+    if( cur_file_pos == lseek( fd, 0, SEEK_END ) )
+    {
+      if( first_last )
+      {
+        realloc_size = ( ssize_t )( bytes_read + checksum_size );
+        bytes_to_process = bytes_read;
+      }
+      else
+      {
+        realloc_size = ( ssize_t )( poly_bytes + bytes_read + checksum_size );
+        bytes_to_process = poly_bytes + bytes_read;
+      }
+      if( !( realloc_file = ( uint8_t* )realloc( ( void* )file_buf, realloc_size ) ) ||
+          !( realloc_poly = ( uint8_t* )realloc( ( void* )poly_buf, realloc_size ) ) ||
+          !( realloc_mask = ( uint8_t* )realloc( ( void* )mask_buf, realloc_size ) ) )
       {
         ( void )fprintf( stderr, "Failed to reallocate memory.\n" );
         goto exit_fail;
@@ -263,15 +316,23 @@ static void calculate_crc( void )
       file_buf = realloc_file;
       poly_buf = realloc_poly;
       mask_buf = realloc_mask;
+      file_walker = 0x00;
     }
-  }
+    else
+    {
+      ( void )lseek( fd, cur_file_pos, SEEK_SET );
+      bytes_to_process = file_buf_size - poly_bytes;
+    }
+    ( void )fprintf( stdout, "%5d: keep walking ..., bytes to process: %d\n", 
+                             ++file_piece_no,
+                             bytes_to_process );
+  } while( file_walker );
 
+  free_resources( fd, ( void* )file_buf, ( void* )poly_buf, ( void* )mask_buf );
   return;
+
 	exit_fail:
-    free( ( void* )file_buf );
-    free( ( void* )poly_buf );
-    free( ( void* )mask_buf );
-    ( void )close( fd );
+    free_resources( fd, ( void* )file_buf, ( void* )poly_buf, ( void* )mask_buf );
     exit( EXIT_FAILURE );
 }
 
