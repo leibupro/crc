@@ -15,6 +15,10 @@
 
 #define DEF_CRC_MODE 32
 #define FILE_BUF_SIZE ( 64UL * 1024UL * 1024UL )
+#define BYTES_TO_BIT 8UL
+#define RIGHT_MOST_BIT 0x01U
+#define LEFT_MOST_BIT  0x80U
+
 
 /* CRC polynomial coefficients 
  * OK, these polynomials were taken from this source: 
@@ -49,8 +53,6 @@ static uint8_t poly_64_mask[] = { 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFF
 /* polynomials can be accessed with the polynomial_degree as index */
 static uint8_t* polynomials[ 65 ][ 2 ];
 
-#define BYTES_TO_BIT 8UL
-
 
 static uint8_t polynomial_degree = 0x00;
 /* the +1 is to assure that the path string is always 0 terminated. */
@@ -62,6 +64,12 @@ static void print_usage( FILE* out );
 static void init_polynomials( void );
 static void free_resources( int fd, void* file_buf, void* poly_buf, void* mask_buf );
 static void calculate_crc( void );
+
+static void 
+crunch(  uint8_t* file_buf, uint8_t* poly_buf, uint8_t* mask_buf, 
+         uint32_t bytes_to_process, uint8_t** remainder );
+
+static inline void shift_one_right( uint8_t* field, uint8_t overflows );
 
 
 static void print_usage( FILE* out )
@@ -191,6 +199,43 @@ static void parse_args( int argc, char** argv )
 }
 
 
+static inline void shift_one_right( uint8_t* field, uint8_t overflows )
+{
+  uint8_t i;
+  uint8_t carry;
+
+  /* we have start at the right most byte and pull
+   * the bits from left to right */
+  for( i = overflows; i > 0; i-- )
+  {
+    /* take the right most bit from the left neighbour and save it */
+    carry = *( field + ( i - 1 ) ) & RIGHT_MOST_BIT;
+    /* move it to be the left most bit in the carry store */
+    carry <<= 7U;
+
+    /* make a right shift of one on the left neighbour */
+    *( field + ( i - 1 ) ) >>= 1U;
+    /* make a right shift of one on the current byte */
+    *( field + i ) >>= 1U;
+    /* place the stored carry bit in the current byte */
+    *( field + i ) |= ( carry & LEFT_MOST_BIT );
+  }
+}
+
+
+static void 
+crunch(  uint8_t* file_buf, uint8_t* poly_buf, uint8_t* mask_buf, 
+         uint32_t bytes_to_process, uint8_t** remainder )
+{
+  /* not implemented yet. */
+  file_buf = file_buf;
+  poly_buf = poly_buf;
+  mask_buf = mask_buf;
+  bytes_to_process = bytes_to_process;
+  *remainder = NULL;
+}
+
+
 static void calculate_crc( void )
 {
 	uint8_t* file_buf     = NULL;
@@ -226,6 +271,8 @@ static void calculate_crc( void )
   off_t cur_file_pos = 0;
 
   uint32_t file_piece_no = 0;
+
+  uint8_t* remainder_location = NULL;
 
   checksum_size = 
     ( polynomial_degree / BYTES_TO_BIT == 0 ) ? 1 : ( polynomial_degree / BYTES_TO_BIT );
@@ -296,14 +343,19 @@ static void calculate_crc( void )
     cur_file_pos = lseek( fd, 0, SEEK_CUR );
     if( cur_file_pos == lseek( fd, 0, SEEK_END ) )
     {
+      /* 
+       * The + 1 in the realloc size is here so that we have enough
+       * space available and the right shift during the last byte
+       * will not segfault.
+       */
       if( first_last )
       {
-        realloc_size = ( ssize_t )( bytes_read + checksum_size );
+        realloc_size = ( ssize_t )( bytes_read + checksum_size + 1 );
         bytes_to_process = bytes_read;
       }
       else
       {
-        realloc_size = ( ssize_t )( poly_bytes + bytes_read + checksum_size );
+        realloc_size = ( ssize_t )( poly_bytes + bytes_read + checksum_size + 1 );
         bytes_to_process = poly_bytes + bytes_read;
       }
       if( !( realloc_file = ( uint8_t* )realloc( ( void* )file_buf, realloc_size ) ) ||
@@ -326,6 +378,9 @@ static void calculate_crc( void )
     ( void )fprintf( stdout, "%5d: keep walking ..., bytes to process: %d\n", 
                              ++file_piece_no,
                              bytes_to_process );
+
+    crunch( file_buf, poly_buf, mask_buf, bytes_to_process, &remainder_location );
+
   } while( file_walker );
 
   free_resources( fd, ( void* )file_buf, ( void* )poly_buf, ( void* )mask_buf );
