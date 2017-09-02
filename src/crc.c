@@ -18,6 +18,7 @@
 #define BYTES_TO_BIT 8UL
 #define RIGHT_MOST_BIT 0x01U
 #define LEFT_MOST_BIT  0x80U
+#define MODULO_8_MASK  0x0000000000000007UL
 
 
 /* CRC polynomial coefficients 
@@ -66,8 +67,9 @@ static void free_resources( int fd, void* file_buf, void* poly_buf, void* mask_b
 static void calculate_crc( void );
 
 static void 
-crunch(  uint8_t* file_buf, uint8_t* poly_buf, uint8_t* mask_buf, 
-         uint32_t bytes_to_process, uint8_t** remainder );
+crunch( uint8_t* file_buf, uint8_t* poly_buf, uint8_t* mask_buf, 
+        uint32_t bytes_to_process, uint8_t poly_bytes, 
+        uint8_t** remainder );
 
 static inline void shift_one_right( uint8_t* field, uint8_t overflows );
 
@@ -224,15 +226,40 @@ static inline void shift_one_right( uint8_t* field, uint8_t overflows )
 
 
 static void 
-crunch(  uint8_t* file_buf, uint8_t* poly_buf, uint8_t* mask_buf, 
-         uint32_t bytes_to_process, uint8_t** remainder )
+crunch( uint8_t* file_buf, uint8_t* poly_buf, uint8_t* mask_buf, 
+        uint32_t bytes_to_process, uint8_t poly_bytes,
+        uint8_t** remainder )
 {
-  /* not implemented yet. */
-  file_buf = file_buf;
-  poly_buf = poly_buf;
-  mask_buf = mask_buf;
-  bytes_to_process = bytes_to_process;
-  *remainder = NULL;
+  uint64_t bits_to_process = ( bytes_to_process * BYTES_TO_BIT );
+  uint64_t i;
+  uint32_t byte_offset = 0;
+  uint8_t  bit_offset = 0;
+  uint8_t  first_bit = 0x80U;
+  uint32_t j;
+
+  for( i = 0; i < bits_to_process; i++ )
+  {
+    if( i > 0 && !( bit_offset = ( i & MODULO_8_MASK ) ) )
+    {
+      first_bit = 0x80U;
+      byte_offset++;
+    }
+    
+    first_bit >>= bit_offset;
+
+    if( *( file_buf + byte_offset ) & first_bit )
+    {
+      for( j = byte_offset; j < ( byte_offset + poly_bytes ); j++ )
+      {
+        *( file_buf + j ) ^= *( poly_buf + j );
+      }
+    }
+
+    shift_one_right( poly_buf, poly_bytes );
+    shift_one_right( mask_buf, poly_bytes );
+  }
+
+  *remainder = ( file_buf + bytes_to_process );
 }
 
 
@@ -304,6 +331,12 @@ static void calculate_crc( void )
                            file_size_byte,
                            file_size_bit );
 
+  if( !file_size_byte )
+  {
+    ( void )fprintf( stdout, "File size is zero bytes. Checksum is 0.\n" );
+    goto exit_success;
+  }
+
   if( file_buf_size <= ( uint32_t )poly_bytes )
   {
     ( void )fprintf( stderr, "File buffer must be greater than polynomial size.\n" );
@@ -314,6 +347,15 @@ static void calculate_crc( void )
   {
     first_last = 0xFF;
   }
+
+  /* write according polynomial and mask into buffers. */
+  ( void )memcpy( ( void* )poly_buf, 
+                  ( const void* )&polynomials[ polynomial_degree ][ 0 ], 
+                  poly_bytes );
+
+  ( void )memcpy( ( void* )mask_buf, 
+                  ( const void* )&polynomials[ polynomial_degree ][ 1 ], 
+                  poly_bytes );
 
   do
   {
@@ -379,12 +421,20 @@ static void calculate_crc( void )
                              ++file_piece_no,
                              bytes_to_process );
 
-    crunch( file_buf, poly_buf, mask_buf, bytes_to_process, &remainder_location );
+    crunch( file_buf, poly_buf, mask_buf, 
+            bytes_to_process, poly_bytes, 
+            &remainder_location );
 
   } while( file_walker );
 
-  free_resources( fd, ( void* )file_buf, ( void* )poly_buf, ( void* )mask_buf );
-  return;
+  ( void )fprintf( stdout, "\n\nRemainder: 0x%02x\n", *remainder_location );
+
+  /* just to be correct and consistent */
+  goto exit_success;
+
+  exit_success:
+    free_resources( fd, ( void* )file_buf, ( void* )poly_buf, ( void* )mask_buf );
+    return;
 
 	exit_fail:
     free_resources( fd, ( void* )file_buf, ( void* )poly_buf, ( void* )mask_buf );
