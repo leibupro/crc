@@ -34,7 +34,7 @@
  */
 
 static uint8_t poly_3[]       = { 0xB0U };
-static uint8_t poly_3_mask[]  = { 0xE0U };
+static uint8_t poly_3_mask[]  = { 0xF0U };
 
 static uint8_t poly_8[]       = { 0xEAU, 0x80U };
 static uint8_t poly_8_mask[]  = { 0xFFU, 0x80U };
@@ -233,7 +233,7 @@ crunch( uint8_t* file_buf, uint8_t* poly_buf, uint8_t* mask_buf,
   uint64_t bits_to_process = ( bytes_to_process * BYTES_TO_BIT );
   uint64_t i;
   uint32_t byte_offset = 0;
-  uint8_t  bit_offset = 0;
+  uint8_t  bit_offset = 0U;
   uint8_t  first_bit = 0x80U;
   uint32_t j;
 
@@ -241,22 +241,19 @@ crunch( uint8_t* file_buf, uint8_t* poly_buf, uint8_t* mask_buf,
   {
     if( i > 0 && !( bit_offset = ( i & MODULO_8_MASK ) ) )
     {
-      first_bit = 0x80U;
       byte_offset++;
     }
-    
-    first_bit >>= bit_offset;
 
-    if( *( file_buf + byte_offset ) & first_bit )
+    if( *( file_buf + byte_offset ) & ( first_bit >> bit_offset ) )
     {
-      for( j = byte_offset; j < ( byte_offset + poly_bytes ); j++ )
+      for( j = byte_offset; j <= ( byte_offset + poly_bytes ); j++ )
       {
         *( file_buf + j ) ^= *( poly_buf + j );
       }
     }
 
-    shift_one_right( poly_buf, poly_bytes );
-    shift_one_right( mask_buf, poly_bytes );
+    shift_one_right( ( poly_buf + byte_offset ), poly_bytes );
+    shift_one_right( ( mask_buf + byte_offset ), poly_bytes );
   }
 
   *remainder = ( file_buf + bytes_to_process );
@@ -300,6 +297,8 @@ static void calculate_crc( void )
   uint32_t file_piece_no = 0;
 
   uint8_t* remainder_location = NULL;
+
+  uint8_t i;
 
   checksum_size = 
     ( polynomial_degree / BYTES_TO_BIT == 0 ) ? 1 : ( polynomial_degree / BYTES_TO_BIT );
@@ -350,11 +349,11 @@ static void calculate_crc( void )
 
   /* write according polynomial and mask into buffers. */
   ( void )memcpy( ( void* )poly_buf, 
-                  ( const void* )&polynomials[ polynomial_degree ][ 0 ], 
+                  ( const void* )polynomials[ polynomial_degree ][ 0 ], 
                   poly_bytes );
 
   ( void )memcpy( ( void* )mask_buf, 
-                  ( const void* )&polynomials[ polynomial_degree ][ 1 ], 
+                  ( const void* )polynomials[ polynomial_degree ][ 1 ], 
                   poly_bytes );
 
   do
@@ -427,7 +426,12 @@ static void calculate_crc( void )
 
   } while( file_walker );
 
-  ( void )fprintf( stdout, "\n\nRemainder: 0x%02x\n", *remainder_location );
+  ( void )fprintf( stdout, "\n\nRemainder: " );
+  for( i = 0; i < checksum_size; i++ )
+  {
+    ( void )fprintf( stdout, "0x%02x ", *( remainder_location + i ) );
+  }
+  ( void )fprintf( stdout, "\n" );
 
   /* just to be correct and consistent */
   goto exit_success;
