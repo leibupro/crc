@@ -203,25 +203,16 @@ static void parse_args( int argc, char** argv )
 
 static inline void shift_one_right( uint8_t* field, uint8_t overflows )
 {
-  uint8_t i;
-  uint8_t carry;
+  uint8_t i, c_1 = 0x00;
 
-  /* we have start at the right most byte and pull
-   * the bits from left to right */
   for( i = overflows; i > 0; i-- )
   {
-    /* take the right most bit from the left neighbour and save it */
-    carry = *( field + ( i - 1 ) ) & RIGHT_MOST_BIT;
-    /* move it to be the left most bit in the carry store */
-    carry <<= 7U;
-
-    /* make a right shift of one on the left neighbour */
-    *( field + ( i - 1 ) ) >>= 1U;
-    /* make a right shift of one on the current byte */
     *( field + i ) >>= 1U;
-    /* place the stored carry bit in the current byte */
-    *( field + i ) |= ( carry & LEFT_MOST_BIT );
+    c_1 = ( *( field + ( i - 1 ) ) & RIGHT_MOST_BIT ) << 7U;
+    *( field + i ) |= c_1;
   }
+
+  *field >>= 1U;
 }
 
 
