@@ -72,6 +72,7 @@ crunch( uint8_t* file_buf, uint8_t* poly_buf, uint8_t* mask_buf,
         uint8_t** remainder );
 
 static inline void shift_one_right( uint8_t* field, uint8_t overflows );
+static inline void reverse_bits( uint8_t* field, uint32_t n );
 
 
 static void print_usage( FILE* out )
@@ -201,15 +202,32 @@ static void parse_args( int argc, char** argv )
 }
 
 
+static inline void reverse_bits( uint8_t* field, uint32_t n )
+{
+  uint32_t i;
+  uint8_t b;
+
+  for( i = 0; i < n; i++ )
+  {
+    b = *( field + i );
+    b = ( ( b & 0x80 ) >> 7 ) | ( ( b & 0x01 ) << 7 ) |
+        ( ( b & 0x40 ) >> 5 ) | ( ( b & 0x02 ) << 5 ) |
+        ( ( b & 0x20 ) >> 3 ) | ( ( b & 0x04 ) << 3 ) |
+        ( ( b & 0x10 ) >> 1 ) | ( ( b & 0x08 ) << 1 ) ;
+    *( field + i ) = b;
+  }
+}
+
+
 static inline void shift_one_right( uint8_t* field, uint8_t overflows )
 {
-  uint8_t i, c_1 = 0x00;
+  uint8_t i, c = 0x00;
 
   for( i = overflows; i > 0; i-- )
   {
     *( field + i ) >>= 1U;
-    c_1 = ( *( field + ( i - 1 ) ) & RIGHT_MOST_BIT ) << 7U;
-    *( field + i ) |= c_1;
+    c = ( *( field + ( i - 1 ) ) & RIGHT_MOST_BIT ) << 7U;
+    *( field + i ) |= c;
   }
 
   *field >>= 1U;
@@ -352,6 +370,7 @@ static void calculate_crc( void )
     if( first )
     {
       bytes_read = read( fd, ( void* )file_buf, file_buf_size );
+      reverse_bits( file_buf, bytes_read );
       first = 0x00;
     }
     else
@@ -369,6 +388,7 @@ static void calculate_crc( void )
       bytes_read = read( fd, 
                          ( void* )( file_buf + poly_bytes ), 
                          ( file_buf_size - poly_bytes ) );
+      reverse_bits( ( file_buf + poly_bytes ), bytes_read );
     }
 
     /* we are at the end and can add the checksum bytes */
