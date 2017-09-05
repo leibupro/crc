@@ -34,25 +34,20 @@
  */
 
 static uint8_t poly_3[]       = { 0xB0U };
-static uint8_t poly_3_mask[]  = { 0xF0U };
 
 static uint8_t poly_8[]       = { 0xEAU, 0x80U };
-static uint8_t poly_8_mask[]  = { 0xFFU, 0x80U };
 
 /* CRC-16-CCITT */
 static uint8_t poly_16[]      = { 0x88U, 0x10U, 0x80U };
-static uint8_t poly_16_mask[] = { 0xFFU, 0xFFU, 0x80U };
 
 /* CRC-32 */
 static uint8_t poly_32[]      = { 0x82U, 0x60U, 0x8EU, 0xDBU, 0x80U };
-static uint8_t poly_32_mask[] = { 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0x80U };
 
 /* CRC-64-ISO */
 static uint8_t poly_64[]      = { 0x80U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x0DU, 0x80U };
-static uint8_t poly_64_mask[] = { 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0x80U };
 
 /* polynomials can be accessed with the polynomial_degree as index */
-static uint8_t* polynomials[ 65 ][ 2 ];
+static uint8_t* polynomials[ 65 ];
 
 
 static uint8_t polynomial_degree = 0x00;
@@ -63,16 +58,17 @@ static uint8_t file[ PATH_MAX + 1 ] = { 0x00 };
 static void parse_args( int argc, char** argv );
 static void print_usage( FILE* out );
 static void init_polynomials( void );
-static void free_resources( int fd, void* file_buf, void* poly_buf, void* mask_buf );
+static void free_resources( int fd, void* file_buf, void* poly_buf );
 static void calculate_crc( void );
 
 static void 
-crunch( uint8_t* file_buf, uint8_t* poly_buf, uint8_t* mask_buf, 
+crunch( uint8_t* file_buf, uint8_t* poly_buf, 
         uint32_t bytes_to_process, uint8_t poly_bytes, 
         uint8_t** remainder );
 
 static inline void shift_one_right( uint8_t* field, uint8_t overflows );
 static inline void reverse_bits( uint8_t* field, uint32_t n );
+static void xor_bits( uint8_t* field, uint16_t n );
 
 
 static void print_usage( FILE* out )
@@ -91,28 +87,18 @@ static void print_usage( FILE* out )
 
 static void init_polynomials( void )
 {
-  polynomials[  3 ][ 0 ] = &poly_3[ 0 ];
-  polynomials[  3 ][ 1 ] = &poly_3_mask[ 0 ];
-  
-  polynomials[  8 ][ 0 ] = &poly_8[ 0 ];
-  polynomials[  8 ][ 1 ] = &poly_8_mask[ 0 ];
-  
-  polynomials[ 16 ][ 0 ] = &poly_16[ 0 ];
-  polynomials[ 16 ][ 1 ] = &poly_16_mask[ 0 ];
-  
-  polynomials[ 32 ][ 0 ] = &poly_32[ 0 ];
-  polynomials[ 32 ][ 1 ] = &poly_32_mask[ 0 ];
-  
-  polynomials[ 64 ][ 0 ] = &poly_64[ 0 ];
-  polynomials[ 64 ][ 1 ] = &poly_64_mask[ 0 ];
+  polynomials[  3 ] = &poly_3 [ 0 ];
+  polynomials[  8 ] = &poly_8 [ 0 ];
+  polynomials[ 16 ] = &poly_16[ 0 ];
+  polynomials[ 32 ] = &poly_32[ 0 ];
+  polynomials[ 64 ] = &poly_64[ 0 ];
 }
 
 
-static void free_resources( int fd, void* file_buf, void* poly_buf, void* mask_buf )
+static void free_resources( int fd, void* file_buf, void* poly_buf )
 {
   free( file_buf );
   free( poly_buf );
-  free( mask_buf );
   ( void )close( fd );
 }
 
@@ -219,6 +205,27 @@ static inline void reverse_bits( uint8_t* field, uint32_t n )
 }
 
 
+/* 
+ * This function does XOR n bits with 1 (one) in a given field. 
+ * This operation has the same effect just like inverting
+ * n source bits in field.
+ */
+static void xor_bits( uint8_t* field, uint16_t n )
+{
+  uint16_t i, byte;
+  uint8_t bit_offset;
+
+  for( i = 0, byte = 0; i < n; i++ )
+  {
+    if( !( bit_offset = ( i & MODULO_8_MASK ) ) && i > 0 )
+    {
+      byte++;
+    }
+    *( field + byte ) ^= ( LEFT_MOST_BIT >> bit_offset );
+  }
+}
+
+
 static inline void shift_one_right( uint8_t* field, uint8_t overflows )
 {
   uint8_t i, c = 0x00;
@@ -235,7 +242,7 @@ static inline void shift_one_right( uint8_t* field, uint8_t overflows )
 
 
 static void 
-crunch( uint8_t* file_buf, uint8_t* poly_buf, uint8_t* mask_buf, 
+crunch( uint8_t* file_buf, uint8_t* poly_buf, 
         uint32_t bytes_to_process, uint8_t poly_bytes,
         uint8_t** remainder )
 {
@@ -248,7 +255,7 @@ crunch( uint8_t* file_buf, uint8_t* poly_buf, uint8_t* mask_buf,
 
   for( i = 0; i < bits_to_process; i++ )
   {
-    if( i > 0 && !( bit_offset = ( i & MODULO_8_MASK ) ) )
+    if( !( bit_offset = ( i & MODULO_8_MASK ) ) && i > 0 )
     {
       byte_offset++;
     }
@@ -262,7 +269,6 @@ crunch( uint8_t* file_buf, uint8_t* poly_buf, uint8_t* mask_buf,
     }
 
     shift_one_right( ( poly_buf + byte_offset ), poly_bytes );
-    shift_one_right( ( mask_buf + byte_offset ), poly_bytes );
   }
 
   *remainder = ( file_buf + bytes_to_process );
@@ -271,13 +277,11 @@ crunch( uint8_t* file_buf, uint8_t* poly_buf, uint8_t* mask_buf,
 
 static void calculate_crc( void )
 {
-	uint8_t* file_buf     = NULL;
-	uint8_t* poly_buf     = NULL;
-  uint8_t* mask_buf     = NULL;
+  uint8_t* file_buf     = NULL;
+  uint8_t* poly_buf     = NULL;
 
   uint8_t* realloc_file = NULL;
   uint8_t* realloc_poly = NULL;
-  uint8_t* realloc_mask = NULL;
   ssize_t realloc_size = 0;
 
   int fd = ( -1 );
@@ -313,12 +317,11 @@ static void calculate_crc( void )
     ( polynomial_degree / BYTES_TO_BIT == 0 ) ? 1 : ( polynomial_degree / BYTES_TO_BIT );
   poly_bytes = 
     ( polynomial_degree / BYTES_TO_BIT == 0 ) ? 1 : ( checksum_size + 1 );
-	
-	if( !( file_buf = ( uint8_t* )malloc( file_buf_size * sizeof( uint8_t ) ) ) ||
-	    !( poly_buf = ( uint8_t* )calloc( 1, file_buf_size ) ) ||
-	    !( mask_buf = ( uint8_t* )calloc( 1, file_buf_size ) ) )
+  
+  if( !( file_buf = ( uint8_t* )malloc( file_buf_size * sizeof( uint8_t ) ) ) ||
+      !( poly_buf = ( uint8_t* )calloc( 1, file_buf_size ) ) )
   {
-		( void )fprintf( stderr, "Failed to allocate workspace memory.\n" );
+    ( void )fprintf( stderr, "Failed to allocate workspace memory.\n" );
     exit( EXIT_FAILURE );
   }
 
@@ -356,13 +359,9 @@ static void calculate_crc( void )
     first_last = 0xFF;
   }
 
-  /* write according polynomial and mask into buffers. */
+  /* write according polynomial into buffer. */
   ( void )memcpy( ( void* )poly_buf, 
-                  ( const void* )polynomials[ polynomial_degree ][ 0 ], 
-                  poly_bytes );
-
-  ( void )memcpy( ( void* )mask_buf, 
-                  ( const void* )polynomials[ polynomial_degree ][ 1 ], 
+                  ( const void* )polynomials[ polynomial_degree ], 
                   poly_bytes );
 
   do
@@ -371,6 +370,7 @@ static void calculate_crc( void )
     {
       bytes_read = read( fd, ( void* )file_buf, file_buf_size );
       reverse_bits( file_buf, bytes_read );
+      xor_bits( file_buf, ( uint16_t )polynomial_degree );
       first = 0x00;
     }
     else
@@ -380,9 +380,6 @@ static void calculate_crc( void )
                        poly_bytes );
       ( void )memmove( ( void* )poly_buf, 
                        ( void* )( poly_buf + ( file_buf_size - poly_bytes ) ), 
-                       poly_bytes );
-      ( void )memmove( ( void* )mask_buf, 
-                       ( void* )( mask_buf + ( file_buf_size - poly_bytes ) ), 
                        poly_bytes );
 
       bytes_read = read( fd, 
@@ -411,15 +408,13 @@ static void calculate_crc( void )
         bytes_to_process = poly_bytes + bytes_read;
       }
       if( !( realloc_file = ( uint8_t* )realloc( ( void* )file_buf, realloc_size ) ) ||
-          !( realloc_poly = ( uint8_t* )realloc( ( void* )poly_buf, realloc_size ) ) ||
-          !( realloc_mask = ( uint8_t* )realloc( ( void* )mask_buf, realloc_size ) ) )
+          !( realloc_poly = ( uint8_t* )realloc( ( void* )poly_buf, realloc_size ) ) )
       {
         ( void )fprintf( stderr, "Failed to reallocate memory.\n" );
         goto exit_fail;
       }
       file_buf = realloc_file;
       poly_buf = realloc_poly;
-      mask_buf = realloc_mask;
       file_walker = 0x00;
     }
     else
@@ -431,11 +426,14 @@ static void calculate_crc( void )
                              ++file_piece_no,
                              bytes_to_process );
 
-    crunch( file_buf, poly_buf, mask_buf, 
+    crunch( file_buf, poly_buf,
             bytes_to_process, poly_bytes, 
             &remainder_location );
 
   } while( file_walker );
+      
+  xor_bits( remainder_location, ( uint16_t )polynomial_degree );
+  reverse_bits( remainder_location, checksum_size );
 
   ( void )fprintf( stdout, "\n\nRemainder: " );
   for( i = 0; i < checksum_size; i++ )
@@ -448,11 +446,11 @@ static void calculate_crc( void )
   goto exit_success;
 
   exit_success:
-    free_resources( fd, ( void* )file_buf, ( void* )poly_buf, ( void* )mask_buf );
+    free_resources( fd, ( void* )file_buf, ( void* )poly_buf );
     return;
 
-	exit_fail:
-    free_resources( fd, ( void* )file_buf, ( void* )poly_buf, ( void* )mask_buf );
+  exit_fail:
+    free_resources( fd, ( void* )file_buf, ( void* )poly_buf );
     exit( EXIT_FAILURE );
 }
 
