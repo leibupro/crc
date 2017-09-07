@@ -14,7 +14,11 @@
 #include <linux/limits.h>
 
 #define DEF_CRC_MODE 32
+
+#ifndef FILE_BUF_SIZE
 #define FILE_BUF_SIZE ( 64UL * 1024UL * 1024UL )
+#endif
+
 #define BYTES_TO_BIT 8UL
 #define RIGHT_MOST_BIT 0x01U
 #define LEFT_MOST_BIT  0x80U
@@ -381,6 +385,11 @@ static void calculate_crc( void )
       ( void )memmove( ( void* )poly_buf, 
                        ( void* )( poly_buf + ( file_buf_size - poly_bytes ) ), 
                        poly_bytes );
+
+      /* after moving the polynomial buffer to the start of the poly_buf,
+       * the bytes at the end have to be zeroed. */
+      ( void )memset( ( void* )( poly_buf + poly_bytes ), 0x00000000,
+                      ( file_buf_size - poly_bytes ) );
 
       bytes_read = read( fd, 
                          ( void* )( file_buf + poly_bytes ), 
