@@ -1,4 +1,37 @@
-#include <util.h>
+/*
+ * ----------------------------------------------------------------------------
+ * "THE BEER-WARE LICENSE" (Revision 42):
+ * <pl@vqe.ch> wrote this file.  As long as you retain this notice you
+ * can do whatever you want with this stuff. If we meet some day, and you think
+ * this stuff is worth it, you can buy me a beer in return.   P. Leibundgut
+ * ----------------------------------------------------------------------------
+ *
+ * File:      crc.c
+ * 
+ *
+ * Purpose:   This module holds all the
+ *            necessary functions to calculate 
+ *            CRC checksums.
+ *
+ * 
+ * Remarks:   - By now CRC32 polynomials are
+ *              tested and fully functional.
+ *
+ *            - The program crunches the input
+ *              streams bit by bit. This
+ *              can be optimized for example
+ *              with a lookup table.
+ *              A feature that should be
+ *              implemented as soon as
+ *              all the planned polynomials
+ *              are tested and functional.
+ *
+ *
+ * Date:      09/2017 
+ * 
+ */
+
+#include <crc.h>
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -11,15 +44,11 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#include <linux/limits.h>
-
-#define DEF_CRC_MODE 32
-
 #ifndef FILE_BUF_SIZE
 #define FILE_BUF_SIZE ( 64UL * 1024UL * 1024UL )
 #endif
 
-#define BYTES_TO_BIT 8UL
+#define BYTES_TO_BIT   8UL
 #define RIGHT_MOST_BIT 0x01U
 #define LEFT_MOST_BIT  0x80U
 #define MODULO_8_MASK  0x0000000000000007UL
@@ -37,33 +66,25 @@
  * Left shift of seven bit: 0x82608EDB80
  */
 
-static uint8_t poly_3[]       = { 0xB0U };
+static uint8_t poly_3[]  = { 0xB0U };
 
-static uint8_t poly_8[]       = { 0xEAU, 0x80U };
+static uint8_t poly_8[]  = { 0xEAU, 0x80U };
 
 /* CRC-16-CCITT */
-static uint8_t poly_16[]      = { 0x88U, 0x10U, 0x80U };
+static uint8_t poly_16[] = { 0x88U, 0x10U, 0x80U };
 
 /* CRC-32 */
-static uint8_t poly_32[]      = { 0x82U, 0x60U, 0x8EU, 0xDBU, 0x80U };
+static uint8_t poly_32[] = { 0x82U, 0x60U, 0x8EU, 0xDBU, 0x80U };
 
 /* CRC-64-ISO */
-static uint8_t poly_64[]      = { 0x80U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x0DU, 0x80U };
+static uint8_t poly_64[] = { 0x80U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x0DU, 0x80U };
 
 /* polynomials can be accessed with the polynomial_degree as index */
 static uint8_t* polynomials[ 65 ];
 
 
-static uint8_t polynomial_degree = 0x00;
-/* the +1 is to assure that the path string is always 0 terminated. */
-static uint8_t file[ PATH_MAX + 1 ] = { 0x00 };
-
-
-static void parse_args( int argc, char** argv );
-static void print_usage( FILE* out );
 static void init_polynomials( void );
 static void free_resources( int fd, void* file_buf, void* poly_buf );
-static void calculate_crc( void );
 
 static void 
 crunch( uint8_t* file_buf, uint8_t* poly_buf, 
@@ -74,19 +95,8 @@ static inline void shift_one_right( uint8_t* field, uint8_t overflows );
 static inline void reverse_bits( uint8_t* field, uint32_t n );
 static void xor_bits( uint8_t* field, uint16_t n );
 
-
-static void print_usage( FILE* out )
-{
-  ( void )fprintf( out, "\nUsage: \n"
-                        " crc [-w crc_polynomial_degree] -f ./valid/file/path\n\n"
-                        "=====================================================\n"
-                        " Example: crc -w 32 -f /boot/vmlinuz-4.9.0-3-amd64\n" 
-                        "=====================================================\n\n"
-                        "   -w   CRC Polynomial degree / Checksum width\n"
-                        "        Default vlaue is 32 (CRC32).\n" 
-                        "   -f   Valid path (relative or absolute)\n"
-                        "        to an input file.\n\n" );
-}
+static void print_crc_checksum( FILE* out, uint8_t checksum_bytes, 
+                                uint8_t* remainder_location );
 
 
 static void init_polynomials( void )
@@ -104,91 +114,6 @@ static void free_resources( int fd, void* file_buf, void* poly_buf )
   free( file_buf );
   free( poly_buf );
   ( void )close( fd );
-}
-
-
-static void parse_args( int argc, char** argv )
-{
-  int option          = 0;
-  long parsed_number  = 0;
-  uint8_t file_count  = 0;
-  uint8_t ignore_file = 0;
-  uint8_t poly_count  = 0;
-  uint8_t ignore_poly = 0;
-
-  if( argc <= 1 )
-  {
-    goto parse_fail;
-  }
-
-  while( ( option = getopt( argc, argv, "w:f:" ) ) != -1 )
-  {
-    switch( option )
-    {
-      case 'w':
-      {
-        if( !ignore_poly )
-        {
-          parsed_number = try_strtol( optarg );
-          switch( parsed_number )
-          {
-            /* supported polynomials by now */
-            case  3:
-            case  8:
-            case 16:
-            case 32:
-            case 64:
-              polynomial_degree = ( uint8_t )parsed_number;
-              poly_count++;
-              break;
-          }
-          ignore_poly++;
-        }
-        else
-        {
-          ( void )fprintf( stdout, "Ignoring further polynomial degree arguments.\n" );
-        }
-        break;
-      }
-      case 'f':
-      {
-        if( !ignore_file )
-        {
-          ( void )strncpy( ( char* )&file[ 0 ], optarg, PATH_MAX );
-          if( !access( ( const char* )&file[ 0 ], F_OK ) )
-          {
-            file_count++;
-          }
-          ignore_file++;
-        }
-        else
-        {
-          ( void )fprintf( stdout, "Ignoring further file arguments.\n" );
-        }
-        break;
-      }
-      default:
-      {
-        goto parse_fail;
-      }
-    }
-  }
-  if( !file_count )
-  {
-    ( void )fprintf( stderr, "One input file that exists (valid path) must be specified.\n" );
-    goto parse_fail;
-  }
-  if( !poly_count )
-  {
-    polynomial_degree = ( uint8_t )DEF_CRC_MODE;
-    ( void )fprintf( stdout, "you specified no or an unsupported polynomial degree.\n"
-                             "polynomial degree / checksum width must be: [ 3 | 8 | 16 | 32 | 64 ]\n"
-                             "using the default polynomial degree: %d\n", DEF_CRC_MODE );
-  }
-  return;
-  parse_fail:
-    print_usage( stderr );
-    exit( EXIT_FAILURE );
 }
 
 
@@ -279,7 +204,21 @@ crunch( uint8_t* file_buf, uint8_t* poly_buf,
 }
 
 
-static void calculate_crc( void )
+static void print_crc_checksum( FILE* out, uint8_t checksum_bytes, 
+                                uint8_t* remainder_location )
+{
+  int8_t i;
+
+  ( void )fprintf( out, "\n\nCRC checksum: 0x" );
+  for( i = ( int8_t )( checksum_bytes - 1 ); i >= 0; i-- )
+  {
+    ( void )fprintf( out, "%02x", *( remainder_location + i ) );
+  }
+  ( void )fprintf( out, "\n" );
+}
+
+
+void calculate_crc_from_file( const char* file, uint8_t polynomial_degree )
 {
   uint8_t* file_buf     = NULL;
   uint8_t* poly_buf     = NULL;
@@ -314,8 +253,8 @@ static void calculate_crc( void )
   uint32_t file_piece_no = 0;
 
   uint8_t* remainder_location = NULL;
-
-  uint8_t i;
+  
+  init_polynomials();
 
   checksum_size = 
     ( polynomial_degree / BYTES_TO_BIT == 0 ) ? 1 : ( polynomial_degree / BYTES_TO_BIT );
@@ -329,13 +268,13 @@ static void calculate_crc( void )
     exit( EXIT_FAILURE );
   }
 
-  if( ( fd = open( ( const char* )file, O_RDONLY ) ) == ( -1 ) )
+  if( ( fd = open( file, O_RDONLY ) ) == ( -1 ) )
   {
     ( void )fprintf( stderr, "%s\n", strerror( errno ) );
     goto exit_fail;
   }
 
-  if( stat( ( const char* )file, &file_stat ) )
+  if( stat( file, &file_stat ) )
   {
     ( void )fprintf( stderr, "%s\n", strerror( errno ) );
     goto exit_fail;
@@ -444,12 +383,7 @@ static void calculate_crc( void )
   xor_bits( remainder_location, ( uint16_t )polynomial_degree );
   reverse_bits( remainder_location, checksum_size );
 
-  ( void )fprintf( stdout, "\n\nRemainder: " );
-  for( i = 0; i < checksum_size; i++ )
-  {
-    ( void )fprintf( stdout, "0x%02x ", *( remainder_location + i ) );
-  }
-  ( void )fprintf( stdout, "\n" );
+  print_crc_checksum( stdout, checksum_size, remainder_location );
 
   /* just to be correct and consistent */
   goto exit_success;
@@ -461,14 +395,5 @@ static void calculate_crc( void )
   exit_fail:
     free_resources( fd, ( void* )file_buf, ( void* )poly_buf );
     exit( EXIT_FAILURE );
-}
-
-
-int main( int argc, char** argv )
-{
-  parse_args( argc, argv );
-  init_polynomials();
-  calculate_crc();
-  return EXIT_SUCCESS;
 }
 

@@ -6,11 +6,14 @@
  * this stuff is worth it, you can buy me a beer in return.   P. Leibundgut
  * ----------------------------------------------------------------------------
  *
- * File:      util.h
+ * File:      crc.h
  * 
  *
- * Purpose:   Helper module holds some generic
- *            functions to do this and that.
+ * Purpose:   This header holds all the
+ *            necessary public function prototypes 
+ *            to calculate CRC checksums and
+ *            can be included in modules to
+ *            perform CRC calculations.
  *
  * 
  * Remarks:   -
@@ -20,10 +23,11 @@
  * 
  */
 
-#ifndef __UTIL_H_
-#define __UTIL_H_
+#ifndef __CRC_H_
+#define __CRC_H_
 
-long try_strtol( char* str );
+#include <stdint.h>
 
-#endif /* __UTIL_H_ */
+void calculate_crc_from_file( const char* file, uint8_t polynomial_degree );
 
+#endif /* __CRC_H_ */

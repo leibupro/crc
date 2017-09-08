@@ -1,3 +1,24 @@
+# 
+#  ----------------------------------------------------------------------------
+#  "THE BEER-WARE LICENSE" (Revision 42):
+#  <pl@vqe.ch> wrote this file.  As long as you retain this notice you
+#  can do whatever you want with this stuff. If we meet some day, and you think
+#  this stuff is worth it, you can buy me a beer in return.   P. Leibundgut
+#  ----------------------------------------------------------------------------
+# 
+#  File:      Makefile
+#  
+# 
+#  Purpose:   Some recipes to build the program(s)/
+#             libraries of the CRC suite.
+# 
+#  
+#  Remarks:   -
+# 
+# 
+#  Date:      09/2017 
+#  
+
 SHELL := /bin/bash --login
 
 CC := gcc
@@ -25,6 +46,7 @@ BINARY := $(BINDIR)/crc
 
 SRC := $(SRCDIR)/crc.c
 SRC += $(SRCDIR)/util.c
+SRC += $(SRCDIR)/main.c
 
 OBJ := $(addprefix $(OBJDIR)/,$(notdir $(SRC:.c=.o)))
 
