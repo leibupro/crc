@@ -33,12 +33,14 @@
 
 #include <linux/limits.h>
 
-#define DEF_CRC_MODE 32
+#define DEF_CRC_MODE  32
+#define DEF_OPT_LEVEL  0
 
 
 static uint8_t polynomial_degree = 0x00;
 /* the +1 is to assure that the path string is always 0 terminated. */
 static uint8_t file[ PATH_MAX + 1 ] = { 0x00 };
+static uint8_t optimize_level = 0x00;
 
 
 static void parse_args( int argc, char** argv );
@@ -51,29 +53,43 @@ static void print_usage( FILE* out )
                         " crc [-w crc_polynomial_degree] -f ./valid/file/path\n\n"
                         "=====================================================\n"
                         " Example: crc -w 32 -f /boot/vmlinuz-4.9.0-3-amd64\n" 
-                        "=====================================================\n\n"
-                        "   -w   CRC Polynomial degree / Checksum width\n"
+                        "=====================================================\n\n" );
+  /* 
+   * Splitted into two fprintf calls because of the:
+   * error: string length ‘n’ is greater than the length ‘509’ 
+   * ISO C90 compilers are required to support [-Woverlength-strings]
+   */
+  ( void )fprintf( out, "   -w   CRC Polynomial degree / Checksum width\n"
                         "        Default vlaue is 32 (CRC32).\n" 
                         "   -f   Valid path (relative or absolute)\n"
-                        "        to an input file.\n\n" );
+                        "        to an input file.\n"
+                        "   -o   0 (default):\n"
+                        "        No optimisation. Process the input stream\n" 
+                        "        bitwise. (Shift register approach)\n"
+                        "        1:\n"
+                        "        Process bytewise\n"
+                        "        2:\n"
+                        "        Process bytewise with lookup table.\n\n" );
 }
 
 
 static void parse_args( int argc, char** argv )
 {
-  int option          = 0;
-  long parsed_number  = 0;
-  uint8_t file_count  = 0;
-  uint8_t ignore_file = 0;
-  uint8_t poly_count  = 0;
-  uint8_t ignore_poly = 0;
+  int option              = 0;
+  long parsed_number      = 0;
+  uint8_t file_count      = 0;
+  uint8_t ignore_file     = 0;
+  uint8_t poly_count      = 0;
+  uint8_t ignore_poly     = 0;
+  uint8_t optimize_count  = 0;
+  uint8_t ignore_optimize = 0;
 
   if( argc <= 1 )
   {
     goto parse_fail;
   }
 
-  while( ( option = getopt( argc, argv, "w:f:" ) ) != -1 )
+  while( ( option = getopt( argc, argv, "w:f:o:" ) ) != -1 )
   {
     switch( option )
     {
@@ -119,6 +135,29 @@ static void parse_args( int argc, char** argv )
         }
         break;
       }
+      case 'o':
+      {
+        if( !ignore_optimize )
+        {
+          parsed_number = try_strtol( optarg );
+          switch( parsed_number )
+          {
+            /* supported polynomials by now */
+            case 0:
+            case 1:
+            case 2:
+              optimize_level = ( uint8_t )parsed_number;
+              optimize_count++;
+              break;
+          }
+          ignore_optimize++;
+        }
+        else
+        {
+          ( void )fprintf( stdout, "Ignoring further polynomial degree arguments.\n" );
+        }
+        break;
+      }
       default:
       {
         goto parse_fail;
@@ -137,6 +176,12 @@ static void parse_args( int argc, char** argv )
                              "polynomial degree / checksum width must be: [ 3 | 8 | 16 | 32 | 64 ]\n"
                              "using the default polynomial degree: %d\n", DEF_CRC_MODE );
   }
+  if( !optimize_count )
+  {
+    optimize_level = ( uint8_t )DEF_OPT_LEVEL;
+    ( void )fprintf( stdout, "No optimize level was specified. Using the default %d.\n"
+                             "valid optimize levels: [ 0 | 1 | 2 ]\n", DEF_OPT_LEVEL );
+  }
   return;
   parse_fail:
     print_usage( stderr );
@@ -147,7 +192,8 @@ static void parse_args( int argc, char** argv )
 int main( int argc, char** argv )
 {
   parse_args( argc, argv );
-  calculate_crc_from_file( ( const char* )&file[ 0 ], polynomial_degree );
+  calculate_crc_from_file_bitwise( ( const char* )&file[ 0 ], 
+                                   polynomial_degree, optimize_level );
   return EXIT_SUCCESS;
 }
 

@@ -28,6 +28,10 @@
 
 #include <stdint.h>
 
-void calculate_crc_from_file( const char* file, uint8_t polynomial_degree );
+
+void calculate_crc_from_file_bitwise( const char* file, 
+                                      uint8_t polynomial_degree, 
+                                      uint8_t optimize_level );
 
 #endif /* __CRC_H_ */
+
