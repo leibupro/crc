@@ -156,6 +156,7 @@ static inline void reflect_bits( uint8_t* field, uint32_t n );
 static void print_crc_checksum( FILE* out, uint8_t checksum_bytes, 
                                 uint8_t* remainder_location );
 static void check_input_reflect( uint8_t* buf, uint32_t n );
+static void xor_bits_bytewise( uint8_t* field, uint8_t* xor_values, uint32_t n );
 
 
 static void init_polynomial( uint8_t degree, uint8_t level )
@@ -292,79 +293,24 @@ crunch( uint8_t* file_buf, uint8_t* poly_buf,
         uint32_t bytes_to_process, uint8_t poly_bytes,
         uint8_t** remainder )
 {
-  uint64_t bits_to_process = ( bytes_to_process * BYTES_TO_BIT );
-  uint64_t i = 0;
-  uint32_t byte_offset = 0;
-  uint8_t  bit_offset = 0U;
+  uint32_t byte_offset, i;
+  uint8_t  bit_offset;
   uint8_t  first_bit = 0x80U;
-  uint32_t j;
-  uint8_t  k, l;
-
-  static uint32_t crunch_calls = 0;
-
-  i = i;
-  bit_offset = bit_offset;
-  byte_offset = byte_offset;
-  bits_to_process = bits_to_process;
-  /*
-  for( i = 0; i < bits_to_process; i++ )
-  {
-    if( !( bit_offset = ( i & MODULO_8_MASK ) ) )
-    {
-      if( i > 0 )
-      {
-        byte_offset++;
-      }
-      if( polynomial.reflect_input )
-      {
-        reflect_bits( ( file_buf + byte_offset ), 1 );
-      }
-    }
-
-    if( *( file_buf + byte_offset ) & ( first_bit >> bit_offset ) )
-    {
-      for( j = byte_offset; j <= ( byte_offset + poly_bytes ); j++ )
-      {
-        *( file_buf + j ) ^= *( poly_buf + j );
-      }
-    }
-
-    shift_one_right( ( poly_buf + byte_offset ), poly_bytes );
-  }
-  */
-
-  crunch_calls++;
   
-  if( polynomial.reflect_input )
+  for( byte_offset = 0; byte_offset < bytes_to_process; byte_offset++ )
   {
-    reflect_bits( file_buf, bytes_to_process );
-  }
-
-  /* initial xor ... */
-  if( crunch_calls == 1 )
-  {
-    for( k = 0; k < ( poly_bytes - 1 ); k++ )
+    for( bit_offset = 0; bit_offset < 8; bit_offset++ )
     {
-      *( file_buf + k ) ^= *( polynomial.initial_xor.u_8 + k );
-    }
-  }
-  
-  for( j = 0; j < bytes_to_process; j++ )
-  {
-    /* k is the bit offset */
-    for( k = 0; k < 8; k++ )
-    {
-      if( *( file_buf + j ) & ( first_bit >> k ) )
+      if( *( file_buf + byte_offset ) & ( first_bit >> bit_offset ) )
       {
-        for( l = j; l <= ( j + poly_bytes ); l++ )
+        for( i = byte_offset; i <= ( byte_offset + poly_bytes ); i++ )
         {
-          *( file_buf + l ) ^= *( poly_buf + l );
+          *( file_buf + i ) ^= *( poly_buf + i );
         }
       }
-      shift_one_right( ( poly_buf + j ), poly_bytes );
+      shift_one_right( ( poly_buf + byte_offset ), poly_bytes );
     }
   }
-
 
   *remainder = ( file_buf + bytes_to_process );
 }
@@ -376,9 +322,19 @@ static void print_crc_checksum( FILE* out, uint8_t checksum_bytes,
   int8_t i;
 
   ( void )fprintf( out, "\n\nCRC checksum: 0x" );
-  for( i = ( int8_t )( checksum_bytes - 1 ); i >= 0; i-- )
+  if( polynomial.reflect_remainder )
   {
-    ( void )fprintf( out, "%02x", *( remainder_location + i ) );
+    for( i = ( int8_t )( checksum_bytes - 1 ); i >= 0; i-- )
+    {
+      ( void )fprintf( out, "%02x", *( remainder_location + i ) );
+    }
+  }
+  else
+  {
+    for( i = 0; i < ( int8_t )checksum_bytes; i++ )
+    {
+      ( void )fprintf( out, "%02x", *( remainder_location + i ) );
+    }
   }
   ( void )fprintf( out, "\n" );
 }
@@ -389,6 +345,17 @@ static void check_input_reflect( uint8_t* buf, uint32_t n )
   if( polynomial.reflect_input )
   {
     reflect_bits( buf, n );
+  }
+}
+
+
+static void xor_bits_bytewise( uint8_t* field, uint8_t* xor_values, uint32_t n )
+{
+  uint32_t i;
+
+  for( i = 0; i < n; i++ )
+  {
+    *( field + i ) ^= *( xor_values + i );
   }
 }
 
@@ -490,6 +457,8 @@ void calculate_crc_from_file_bitwise( const char* file,
     {
       bytes_read = read( fd, ( void* )file_buf, file_buf_size );
       check_input_reflect( file_buf, bytes_read );
+      xor_bits_bytewise( file_buf, polynomial.initial_xor.u_8, 
+                         ( uint32_t )checksum_size );
       first = 0x00;
     }
     else
@@ -556,6 +525,9 @@ void calculate_crc_from_file_bitwise( const char* file,
 
   } while( file_walker );
   
+  xor_bits_bytewise( remainder_location, polynomial.final_xor.u_8, 
+                     ( uint32_t )checksum_size );
+
   if( polynomial.reflect_remainder )
   {
     reflect_bits( remainder_location, checksum_size );
