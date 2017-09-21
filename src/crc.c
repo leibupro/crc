@@ -303,7 +303,7 @@ crunch( uint8_t* file_buf, uint8_t* poly_buf,
     {
       if( *( file_buf + byte_offset ) & ( first_bit >> bit_offset ) )
       {
-        for( i = byte_offset; i <= ( byte_offset + poly_bytes ); i++ )
+        for( i = byte_offset; i < ( byte_offset + poly_bytes ); i++ )
         {
           *( file_buf + i ) ^= *( poly_buf + i );
         }
