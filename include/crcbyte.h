@@ -6,32 +6,31 @@
  * this stuff is worth it, you can buy me a beer in return.   P. Leibundgut
  * ----------------------------------------------------------------------------
  *
- * File:      crc.h
+ * File:      crcbyte.h
  * 
  *
  * Purpose:   This header holds all the
  *            necessary public function prototypes 
  *            to calculate CRC checksums and
  *            can be included in modules to
- *            perform CRC calculations.
+ *            perform CRC calculations bytewise.
  *
  * 
  * Remarks:   -
  *
  *
- * Date:      09/2017 
+ * Date:      11/2017 
  * 
  */
 
-#ifndef __CRC_H_
-#define __CRC_H_
+#ifndef __CRCBYTE_H_
+#define __CRCBYTE_H_
 
 #include <stdint.h>
 
 
-void calculate_crc_from_file_bitwise( const char* file, 
-                                      uint8_t polynomial_degree, 
-                                      uint8_t optimize_level );
+void calculate_crc_from_file_bytewise( char* const file, 
+                                       uint8_t polynomial_degree );
 
-#endif /* __CRC_H_ */
+#endif /* __CRCBYTE_H_ */
 

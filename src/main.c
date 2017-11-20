@@ -23,7 +23,7 @@
  */
 
 #include <util.h>
-#include <crc.h>
+#include <crcbit.h>
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -142,7 +142,7 @@ static void parse_args( int argc, char** argv )
           parsed_number = try_strtol( optarg );
           switch( parsed_number )
           {
-            /* supported polynomials by now */
+            /* supported optimisation levels by now */
             case 0:
             case 1:
             case 2:
@@ -192,8 +192,17 @@ static void parse_args( int argc, char** argv )
 int main( int argc, char** argv )
 {
   parse_args( argc, argv );
-  calculate_crc_from_file_bitwise( ( const char* )&file[ 0 ], 
-                                   polynomial_degree, optimize_level );
+  switch( optimize_level )
+  {
+    case 0:
+      calculate_crc_from_file_bitwise( ( char* const )&file[ 0 ], 
+                                       polynomial_degree );
+      break;
+    case 1:
+      break;
+    case 2:
+      break;
+  }
   return EXIT_SUCCESS;
 }
 

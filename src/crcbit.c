@@ -6,12 +6,12 @@
  * this stuff is worth it, you can buy me a beer in return.   P. Leibundgut
  * ----------------------------------------------------------------------------
  *
- * File:      crc.c
+ * File:      crcbit.c
  * 
  *
  * Purpose:   This module holds all the
  *            necessary functions to calculate 
- *            CRC checksums.
+ *            CRC checksums bitwise.
  *
  * 
  * Remarks:   - By now CRC32 polynomials are
@@ -31,7 +31,7 @@
  * 
  */
 
-#include <crc.h>
+#include <crcbit.h>
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -112,37 +112,9 @@ static uint8_t poly_64_odd[]    = { 0x80U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x
 static uint8_t poly_64_odd_ix[] = { 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U };
 static uint8_t poly_64_odd_fx[] = { 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U };
 
-
-/* Polynimial coefficients where the most sgnificant bit is omitted */
-
-/* CRC-3 example from wikipedia */
-static uint8_t  poly_3_even     = 0x03U;
-static uint8_t  poly_3_even_ix  = 0x00U;
-static uint8_t  poly_3_even_fx  = 0x00U;
-
-/* CRC-8-CCITT */
-static uint8_t  poly_8_even     = 0x07U;
-static uint8_t  poly_8_even_ix  = 0x00U;
-static uint8_t  poly_8_even_fx  = 0x00U;
-
-/* CRC-16-CCITT (zero) */
-static uint16_t poly_16_even    = 0x1021U;
-static uint16_t poly_16_even_ix = 0x0000U;
-static uint16_t poly_16_even_fx = 0x0000U;
-
-/* CRC-32 */
-static uint32_t poly_32_even    = 0x04C11DB7U;
-static uint32_t poly_32_even_ix = 0xFFFFFFFFU;
-static uint32_t poly_32_even_fx = 0xFFFFFFFFU;
-
-/* CRC-64-ISO */
-static uint64_t poly_64_even    = 0x000000000000001BU;
-static uint64_t poly_64_even_ix = 0x0000000000000000U;
-static uint64_t poly_64_even_fx = 0x0000000000000000U;
-
 crc_param_t polynomial;
 
-static void init_polynomial( uint8_t degree, uint8_t level );
+static void init_polynomial( uint8_t degree );
 static void free_resources( int fd, void* file_buf, void* poly_buf );
 
 static void 
@@ -159,91 +131,47 @@ static void check_input_reflect( uint8_t* buf, uint32_t n );
 static void xor_bits_bytewise( uint8_t* field, uint8_t* xor_values, uint32_t n );
 
 
-static void init_polynomial( uint8_t degree, uint8_t level )
+static void init_polynomial( uint8_t degree )
 {
   polynomial.degree = degree;
 
-  if( level )
+  switch( degree )
   {
-    switch( degree )
-    {
-      case  3:
-        polynomial.coeff.u_8         = &poly_3_even;
-        polynomial.initial_xor.u_8   = &poly_3_even_ix;
-        polynomial.final_xor.u_8     = &poly_3_even_fx;
-        polynomial.reflect_input     = 0x00;
-        polynomial.reflect_remainder = 0x00;
-        break;
-      case  8:
-        polynomial.coeff.u_8         = &poly_8_even;
-        polynomial.initial_xor.u_8   = &poly_8_even_ix;
-        polynomial.final_xor.u_8     = &poly_8_even_fx;
-        polynomial.reflect_input     = 0x00;
-        polynomial.reflect_remainder = 0x00;
-        break;
-      case 16:
-        polynomial.coeff.u_16        = &poly_16_even;
-        polynomial.initial_xor.u_16  = &poly_16_even_ix;
-        polynomial.final_xor.u_16    = &poly_16_even_fx;
-        polynomial.reflect_input     = 0x00;
-        polynomial.reflect_remainder = 0x00;
-        break;
-      case 32:
-        polynomial.coeff.u_32        = &poly_32_even;
-        polynomial.initial_xor.u_32  = &poly_32_even_ix;
-        polynomial.final_xor.u_32    = &poly_32_even_fx;
-        polynomial.reflect_input     = 0xFF;
-        polynomial.reflect_remainder = 0xFF;
-        break;
-      case 64:
-        polynomial.coeff.u_64        = &poly_64_even;
-        polynomial.initial_xor.u_64  = &poly_64_even_ix;
-        polynomial.final_xor.u_64    = &poly_64_even_fx;
-        polynomial.reflect_input     = 0x00;
-        polynomial.reflect_remainder = 0x00;
-        break;
-    }
-  }
-  else
-  {
-    switch( degree )
-    {
-      case  3:
-        polynomial.coeff.u_8         = &poly_3_odd   [ 0 ];
-        polynomial.initial_xor.u_8   = &poly_3_odd_ix[ 0 ];
-        polynomial.final_xor.u_8     = &poly_3_odd_fx[ 0 ];
-        polynomial.reflect_input     = 0x00;
-        polynomial.reflect_remainder = 0x00;
-        break;
-      case  8:
-        polynomial.coeff.u_8         = &poly_8_odd   [ 0 ];
-        polynomial.initial_xor.u_8   = &poly_8_odd_ix[ 0 ];
-        polynomial.final_xor.u_8     = &poly_8_odd_fx[ 0 ];
-        polynomial.reflect_input     = 0x00;
-        polynomial.reflect_remainder = 0x00;
-        break;
-      case 16:
-        polynomial.coeff.u_8         = &poly_16_odd   [ 0 ];
-        polynomial.initial_xor.u_8   = &poly_16_odd_ix[ 0 ];
-        polynomial.final_xor.u_8     = &poly_16_odd_fx[ 0 ];
-        polynomial.reflect_input     = 0x00;
-        polynomial.reflect_remainder = 0x00;
-        break;
-      case 32:
-        polynomial.coeff.u_8         = &poly_32_odd   [ 0 ];
-        polynomial.initial_xor.u_8   = &poly_32_odd_ix[ 0 ];
-        polynomial.final_xor.u_8     = &poly_32_odd_fx[ 0 ];
-        polynomial.reflect_input     = 0xFF;
-        polynomial.reflect_remainder = 0xFF;
-        break;
-      case 64:
-        polynomial.coeff.u_8         = &poly_64_odd   [ 0 ];
-        polynomial.initial_xor.u_8   = &poly_64_odd_ix[ 0 ];
-        polynomial.final_xor.u_8     = &poly_64_odd_fx[ 0 ];
-        polynomial.reflect_input     = 0x00;
-        polynomial.reflect_remainder = 0x00;
-        break;
-    }
+    case  3:
+      polynomial.coeff.u_8         = &poly_3_odd   [ 0 ];
+      polynomial.initial_xor.u_8   = &poly_3_odd_ix[ 0 ];
+      polynomial.final_xor.u_8     = &poly_3_odd_fx[ 0 ];
+      polynomial.reflect_input     = 0x00;
+      polynomial.reflect_remainder = 0x00;
+      break;
+    case  8:
+      polynomial.coeff.u_8         = &poly_8_odd   [ 0 ];
+      polynomial.initial_xor.u_8   = &poly_8_odd_ix[ 0 ];
+      polynomial.final_xor.u_8     = &poly_8_odd_fx[ 0 ];
+      polynomial.reflect_input     = 0x00;
+      polynomial.reflect_remainder = 0x00;
+      break;
+    case 16:
+      polynomial.coeff.u_8         = &poly_16_odd   [ 0 ];
+      polynomial.initial_xor.u_8   = &poly_16_odd_ix[ 0 ];
+      polynomial.final_xor.u_8     = &poly_16_odd_fx[ 0 ];
+      polynomial.reflect_input     = 0x00;
+      polynomial.reflect_remainder = 0x00;
+      break;
+    case 32:
+      polynomial.coeff.u_8         = &poly_32_odd   [ 0 ];
+      polynomial.initial_xor.u_8   = &poly_32_odd_ix[ 0 ];
+      polynomial.final_xor.u_8     = &poly_32_odd_fx[ 0 ];
+      polynomial.reflect_input     = 0xFF;
+      polynomial.reflect_remainder = 0xFF;
+      break;
+    case 64:
+      polynomial.coeff.u_8         = &poly_64_odd   [ 0 ];
+      polynomial.initial_xor.u_8   = &poly_64_odd_ix[ 0 ];
+      polynomial.final_xor.u_8     = &poly_64_odd_fx[ 0 ];
+      polynomial.reflect_input     = 0x00;
+      polynomial.reflect_remainder = 0x00;
+      break;
   }
 }
 
@@ -360,9 +288,8 @@ static void xor_bits_bytewise( uint8_t* field, uint8_t* xor_values, uint32_t n )
 }
 
 
-void calculate_crc_from_file_bitwise( const char* file, 
-                                      uint8_t polynomial_degree, 
-                                      uint8_t optimize_level )
+void calculate_crc_from_file_bitwise( char* const file, 
+                                      uint8_t polynomial_degree )
 {
   uint8_t* file_buf     = NULL;
   uint8_t* poly_buf     = NULL;
@@ -398,7 +325,7 @@ void calculate_crc_from_file_bitwise( const char* file,
 
   uint8_t* remainder_location = NULL;
   
-  init_polynomial( polynomial_degree, optimize_level );
+  init_polynomial( polynomial_degree );
 
   checksum_size = 
     ( polynomial_degree / BYTES_TO_BIT == 0 ) ? 1 : ( polynomial_degree / BYTES_TO_BIT );
