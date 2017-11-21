@@ -31,6 +31,7 @@
  * 
  */
 
+#include <crc.h>
 #include <crcbit.h>
 
 #include <stdint.h>
@@ -52,27 +53,6 @@
 #define RIGHT_MOST_BIT 0x01U
 #define LEFT_MOST_BIT  0x80U
 #define MODULO_8_MASK  0x0000000000000007UL
-
-
-typedef union data
-{
-  uint8_t*  u_8;
-  uint16_t* u_16;
-  uint32_t* u_32;
-  uint64_t* u_64;
-} data_u;
-
-
-typedef struct crc_param
-{
-  uint8_t degree;
-  data_u  coeff;
-  data_u  initial_xor;
-  data_u  final_xor;
-  uint8_t reflect_input;
-  uint8_t reflect_remainder;
-  
-} crc_param_t;
 
 
 /* CRC polynomial coefficients 
@@ -114,7 +94,7 @@ static uint8_t poly_64_odd_fx[] = { 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x
 
 crc_param_t polynomial;
 
-static void init_polynomial( uint8_t degree );
+static void init_polynomial_odd( uint8_t degree );
 static void free_resources( int fd, void* file_buf, void* poly_buf );
 
 static void 
@@ -131,7 +111,7 @@ static void check_input_reflect( uint8_t* buf, uint32_t n );
 static void xor_bits_bytewise( uint8_t* field, uint8_t* xor_values, uint32_t n );
 
 
-static void init_polynomial( uint8_t degree )
+static void init_polynomial_odd( uint8_t degree )
 {
   polynomial.degree = degree;
 
@@ -325,7 +305,7 @@ void calculate_crc_from_file_bitwise( char* const file,
 
   uint8_t* remainder_location = NULL;
   
-  init_polynomial( polynomial_degree );
+  init_polynomial_odd( polynomial_degree );
 
   checksum_size = 
     ( polynomial_degree / BYTES_TO_BIT == 0 ) ? 1 : ( polynomial_degree / BYTES_TO_BIT );

@@ -45,6 +45,7 @@ BINDIR := ./bin
 BINARY := $(BINDIR)/crc
 
 SRC := $(SRCDIR)/crcbit.c
+SRC += $(SRCDIR)/crcbyte.c
 SRC += $(SRCDIR)/util.c
 SRC += $(SRCDIR)/main.c
 

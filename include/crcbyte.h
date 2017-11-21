@@ -32,5 +32,8 @@
 void calculate_crc_from_file_bytewise( char* const file, 
                                        uint8_t polynomial_degree );
 
+void calculate_crc_from_file_bytewise_lut( char* const file, 
+                                           uint8_t polynomial_degree );
+
 #endif /* __CRCBYTE_H_ */
 

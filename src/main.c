@@ -24,6 +24,7 @@
 
 #include <util.h>
 #include <crcbit.h>
+#include <crcbyte.h>
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -199,8 +200,12 @@ int main( int argc, char** argv )
                                        polynomial_degree );
       break;
     case 1:
+      calculate_crc_from_file_bytewise( ( char* const )&file[ 0 ], 
+                                        polynomial_degree );
       break;
     case 2:
+      calculate_crc_from_file_bytewise_lut( ( char* const )&file[ 0 ], 
+                                            polynomial_degree );
       break;
   }
   return EXIT_SUCCESS;
