@@ -28,7 +28,7 @@
 
 long try_strtol( char* str );
 int32_t walk_file( uint8_t** buf, ssize_t buf_len, 
-                   int* const fd, const char* file );
+                   const char* file );
 
 #endif /* __UTIL_H_ */
 

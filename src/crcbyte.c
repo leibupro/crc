@@ -116,9 +116,8 @@ static uint16_t calculate_crc16( const char* file )
   int32_t  bytes_read = 0;
   uint8_t* buf        = NULL;
   ssize_t  buf_len    = FILE_BUF_SIZE;
-  int      fd         = ( -1 );
 
-  while( ( bytes_read = walk_file( &buf, buf_len, &fd, file ) ) )
+  while( ( bytes_read = walk_file( &buf, buf_len, file ) ) )
   {
     ( void )fprintf( stdout, "Bytes read: %d\n", bytes_read );
   }

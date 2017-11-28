@@ -67,19 +67,34 @@ long try_strtol( char* str )
 
 
 int32_t walk_file( uint8_t** buf, ssize_t buf_len, 
-                   int* const fd, const char* file )
+                   const char* file )
 {
   static uint8_t first_call = 0xFF;
   static uint8_t reset = 0x00;
+  static int fd = ( -1 );
+
   struct stat file_stat;
   uint64_t file_size_byte = 0;
   int32_t bytes_read = ( -1 );
   off_t cur_file_pos;
+ 
+  /* the function parameters are only stored
+   * the first time this function gets called. */
+  static uint8_t** buf_local = NULL;
+  static ssize_t buf_len_local = 0;
+  static const char* file_local = NULL;
 
   if( reset )
   {
     first_call = 0xFF;
     reset = 0x00;
+
+    free( *buf_local );
+    *buf_local = NULL;
+
+    buf_len_local = 0;
+    file_local = NULL;
+    
     bytes_read = 0;
     return bytes_read;
   }
@@ -87,25 +102,28 @@ int32_t walk_file( uint8_t** buf, ssize_t buf_len,
   if( first_call )
   {
     first_call = 0x00;
-    *fd = ( -1 );
+    
+    buf_local = buf;
+    buf_len_local = buf_len;
+    file_local = file;
 
-    if( !( *buf = ( uint8_t* )malloc( buf_len * sizeof( uint8_t ) ) ) )
+    if( !( *buf_local = ( uint8_t* )malloc( buf_len_local * sizeof( uint8_t ) ) ) )
     {
       ( void )fprintf( stderr, "Failed to allocate workspace memory.\n" );
       exit( EXIT_FAILURE );
     }
 
-    if( ( *fd = open( file, O_RDONLY ) ) == ( -1 ) )
+    if( ( fd = open( file_local, O_RDONLY ) ) == ( -1 ) )
     {
       ( void )fprintf( stderr, "%s\n", strerror( errno ) );
-      free( *buf );
+      free( *buf_local );
       exit( EXIT_FAILURE );
     }
 
-    if( stat( file, &file_stat ) )
+    if( stat( file_local, &file_stat ) )
     {
       ( void )fprintf( stderr, "%s\n", strerror( errno ) );
-      free( *buf );
+      free( *buf_local );
       exit( EXIT_FAILURE );
     }
     file_size_byte = file_stat.st_size;
@@ -113,21 +131,19 @@ int32_t walk_file( uint8_t** buf, ssize_t buf_len,
                              file_size_byte );
   }
 
-  bytes_read = ( int32_t )read( *fd, ( void* )( *buf ), buf_len );
+  bytes_read = ( int32_t )read( fd, ( void* )( *buf_local ), buf_len_local );
 
-  cur_file_pos = lseek( *fd, 0, SEEK_CUR );
-  if( cur_file_pos == lseek( *fd, 0, SEEK_END ) )
+  cur_file_pos = lseek( fd, 0, SEEK_CUR );
+  if( cur_file_pos == lseek( fd, 0, SEEK_END ) )
   {
     /* we are at the end of the file and can free resources */
-    ( void )close( *fd );
-    *fd = ( -1 );
-    free( *buf );
-    *buf = NULL;
+    ( void )close( fd );
+    fd = ( -1 );
     reset = 0xFF;
   }
   else
   {
-    ( void )lseek( *fd, cur_file_pos, SEEK_SET );
+    ( void )lseek( fd, cur_file_pos, SEEK_SET );
   }
 
   return bytes_read;
