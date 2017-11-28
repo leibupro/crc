@@ -45,10 +45,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#ifndef FILE_BUF_SIZE
-#define FILE_BUF_SIZE ( 64UL * 1024UL * 1024UL )
-#endif
-
 #define BYTES_TO_BIT   8UL
 #define RIGHT_MOST_BIT 0x01U
 #define LEFT_MOST_BIT  0x80U

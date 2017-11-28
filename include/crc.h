@@ -30,12 +30,17 @@
 
 #include <stdint.h>
 
+#ifndef FILE_BUF_SIZE
+#define FILE_BUF_SIZE ( 64UL * 1024UL * 1024UL )
+#endif
+
 typedef union data
 {
   uint8_t*  u_8;
   uint16_t* u_16;
   uint32_t* u_32;
   uint64_t* u_64;
+
 } data_u;
 
 

@@ -29,10 +29,10 @@
 #include <stdint.h>
 
 
-void calculate_crc_from_file_bytewise( char* const file, 
+void calculate_crc_from_file_bytewise( const char* file, 
                                        uint8_t polynomial_degree );
 
-void calculate_crc_from_file_bytewise_lut( char* const file, 
+void calculate_crc_from_file_bytewise_lut( const char* file, 
                                            uint8_t polynomial_degree );
 
 #endif /* __CRCBYTE_H_ */

@@ -26,8 +26,11 @@
  */
 #include <crc.h>
 #include <crcbyte.h>
+#include <util.h>
 
 #include <stdint.h>
+#include <unistd.h>
+#include <stdio.h>
 
 /* Polynimial coefficients where the most sgnificant bit is omitted */
 
@@ -60,6 +63,7 @@ crc_param_t polynomial;
 
 
 static void init_polynomial_even( uint8_t degree );
+static uint16_t calculate_crc16( const char* file );
 
 
 static void init_polynomial_even( uint8_t degree )
@@ -107,22 +111,35 @@ static void init_polynomial_even( uint8_t degree )
 }
 
 
-void calculate_crc_from_file_bytewise( char* const file, 
-                                       uint8_t polynomial_degree )
+static uint16_t calculate_crc16( const char* file )
 {
-  char* foo;
-  init_polynomial_even( polynomial_degree );
-  foo = file;
-  foo = foo;
+  int32_t  bytes_read = 0;
+  uint8_t* buf        = NULL;
+  ssize_t  buf_len    = FILE_BUF_SIZE;
+  int      fd         = ( -1 );
+
+  while( ( bytes_read = walk_file( &buf, buf_len, &fd, file ) ) )
+  {
+    ( void )fprintf( stdout, "Bytes read: %d\n", bytes_read );
+  }
+  return 0xFFFF;
 }
 
 
-void calculate_crc_from_file_bytewise_lut( char* const file, 
+void calculate_crc_from_file_bytewise( const char* file, 
+                                       uint8_t polynomial_degree )
+{
+  init_polynomial_even( polynomial_degree );
+  calculate_crc16( file );
+}
+
+
+void calculate_crc_from_file_bytewise_lut( const char* file, 
                                            uint8_t polynomial_degree )
 {
   char* foo;
   init_polynomial_even( polynomial_degree );
-  foo = file;
+  foo = ( char* )file;
   foo = foo;
 }
 
