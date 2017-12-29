@@ -33,6 +33,7 @@
 
 #include <crc.h>
 #include <crcbit.h>
+#include <util.h>
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -75,7 +76,7 @@ static uint8_t poly_8_odd_fx[]  = { 0x00U };
 
 /* CRC-16-CCITT (zero) */
 static uint8_t poly_16_odd[]    = { 0x88U, 0x10U, 0x80U };
-static uint8_t poly_16_odd_ix[] = { 0x00U, 0x00U };
+static uint8_t poly_16_odd_ix[] = { 0xFFU, 0xFFU };
 static uint8_t poly_16_odd_fx[] = { 0x00U, 0x00U };
 
 /* CRC-32 */
@@ -99,11 +100,9 @@ crunch( uint8_t* file_buf, uint8_t* poly_buf,
         uint8_t** remainder );
 
 static inline void shift_one_right( uint8_t* field, uint8_t overflows );
-static inline void reflect_bits( uint8_t* field, uint32_t n );
 
 static void print_crc_checksum( FILE* out, uint8_t checksum_bytes, 
                                 uint8_t* remainder_location );
-static void check_input_reflect( uint8_t* buf, uint32_t n );
 static void xor_bits_bytewise( uint8_t* field, uint8_t* xor_values, uint32_t n );
 
 
@@ -157,23 +156,6 @@ static void free_resources( int fd, void* file_buf, void* poly_buf )
   free( file_buf );
   free( poly_buf );
   ( void )close( fd );
-}
-
-
-static inline void reflect_bits( uint8_t* field, uint32_t n )
-{
-  uint32_t i;
-  uint8_t b;
-
-  for( i = 0; i < n; i++ )
-  {
-    b = *( field + i );
-    b = ( ( b & 0x80 ) >> 7 ) | ( ( b & 0x01 ) << 7 ) |
-        ( ( b & 0x40 ) >> 5 ) | ( ( b & 0x02 ) << 5 ) |
-        ( ( b & 0x20 ) >> 3 ) | ( ( b & 0x04 ) << 3 ) |
-        ( ( b & 0x10 ) >> 1 ) | ( ( b & 0x08 ) << 1 ) ;
-    *( field + i ) = b;
-  }
 }
 
 
@@ -241,15 +223,6 @@ static void print_crc_checksum( FILE* out, uint8_t checksum_bytes,
     }
   }
   ( void )fprintf( out, "\n" );
-}
-
-
-static void check_input_reflect( uint8_t* buf, uint32_t n )
-{
-  if( polynomial.reflect_input )
-  {
-    reflect_bits( buf, n );
-  }
 }
 
 
@@ -340,6 +313,7 @@ void calculate_crc_from_file_bitwise( char* const file,
 
   if( file_buf_size <= ( uint32_t )poly_bytes )
   {
+    printf( "%d\n", poly_bytes );
     ( void )fprintf( stderr, "File buffer must be greater than polynomial size.\n" );
     goto exit_fail;
   }
@@ -359,7 +333,7 @@ void calculate_crc_from_file_bitwise( char* const file,
     if( first )
     {
       bytes_read = read( fd, ( void* )file_buf, file_buf_size );
-      check_input_reflect( file_buf, bytes_read );
+      check_reflect( file_buf, bytes_read, polynomial.reflect_input );
       xor_bits_bytewise( file_buf, polynomial.initial_xor.u_8, 
                          ( uint32_t )checksum_size );
       first = 0x00;
@@ -381,7 +355,7 @@ void calculate_crc_from_file_bitwise( char* const file,
       bytes_read = read( fd, 
                          ( void* )( file_buf + poly_bytes ), 
                          ( file_buf_size - poly_bytes ) );
-      check_input_reflect( ( file_buf + poly_bytes ), bytes_read );
+      check_reflect( ( file_buf + poly_bytes ), bytes_read, polynomial.reflect_input );
     }
 
     /* we are at the end and can add the checksum bytes */
@@ -431,10 +405,7 @@ void calculate_crc_from_file_bitwise( char* const file,
   xor_bits_bytewise( remainder_location, polynomial.final_xor.u_8, 
                      ( uint32_t )checksum_size );
 
-  if( polynomial.reflect_remainder )
-  {
-    reflect_bits( remainder_location, checksum_size );
-  }
+  check_reflect( remainder_location, checksum_size, polynomial.reflect_remainder );
 
   print_crc_checksum( stdout, checksum_size, remainder_location );
 

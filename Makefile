@@ -29,7 +29,7 @@ SIZE := size
 ifdef dbg
 CF := -std=gnu89 -Wall -Wextra -Werror -pedantic-errors -g -O0
 CF += -DDBG
-CF += -DFILE_BUF_SIZE=7U
+CF += -DFILE_BUF_SIZE=5U
 LF := -std=gnu89 -lrt -Wl,-v
 else
 CF := -std=gnu89 -Wall -Wextra -Werror -pedantic-errors -O3 -funroll-loops -flto

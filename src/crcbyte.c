@@ -44,9 +44,9 @@ static uint8_t  poly_8_even     = 0x07U;
 static uint8_t  poly_8_even_ix  = 0x00U;
 static uint8_t  poly_8_even_fx  = 0x00U;
 
-/* CRC-16-CCITT (zero) */
+/* CRC-16-CCITT (zero/false) */
 static uint16_t poly_16_even    = 0x1021U;
-static uint16_t poly_16_even_ix = 0x0000U;
+static uint16_t poly_16_even_ix = 0xFFFFU;
 static uint16_t poly_16_even_fx = 0x0000U;
 
 /* CRC-32 */

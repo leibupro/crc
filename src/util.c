@@ -37,6 +37,8 @@
 
 #define BASE 10
 
+static inline void reflect_bits( uint8_t* field, uint32_t n );
+
 
 long try_strtol( char* str )
 {
@@ -63,6 +65,32 @@ long try_strtol( char* str )
   }
 
   return val;
+}
+
+
+static inline void reflect_bits( uint8_t* field, uint32_t n )
+{
+  uint32_t i;
+  uint8_t b;
+
+  for( i = 0; i < n; i++ )
+  {
+    b = *( field + i );
+    b = ( ( b & 0x80 ) >> 7 ) | ( ( b & 0x01 ) << 7 ) |
+        ( ( b & 0x40 ) >> 5 ) | ( ( b & 0x02 ) << 5 ) |
+        ( ( b & 0x20 ) >> 3 ) | ( ( b & 0x04 ) << 3 ) |
+        ( ( b & 0x10 ) >> 1 ) | ( ( b & 0x08 ) << 1 ) ;
+    *( field + i ) = b;
+  }
+}
+
+
+void check_reflect( uint8_t* buf, uint32_t n, uint8_t reflect )
+{
+  if( reflect )
+  {
+    reflect_bits( buf, n );
+  }
 }
 
 
