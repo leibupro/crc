@@ -29,7 +29,7 @@
 long try_strtol( char* str );
 void check_reflect( uint8_t* buf, uint32_t n, uint8_t reflect );
 int32_t walk_file( uint8_t** buf, ssize_t buf_len, 
-                   int* const fd, const char* file );
+                   const char* file );
 
 #endif /* __UTIL_H_ */
 
