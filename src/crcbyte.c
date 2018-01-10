@@ -36,6 +36,10 @@
 #include <stdio.h>
 
 
+#define OPT_LEVEL_NONE 0U
+#define OPT_LEVEL_LUT  1U
+
+
 static crc_param_t polynomial_3  = CRC_3_POLY_PARAM;
 static crc_param_t polynomial_8  = CRC_8_POLY_PARAM;
 static crc_param_t polynomial_16 = CRC_16_POLY_PARAM;
@@ -44,9 +48,15 @@ static crc_param_t polynomial_64 = CRC_64_POLY_PARAM;
 
 static crc_param_t polynomial;
 
+static void ( *crc_calc_func )( const char*, uint8_t ) = NULL;
+
 
 static void init_polynomial_even( uint8_t degree );
-static uint16_t calculate_crc16( const char* file );
+static void calculate_crc16( const char* file, uint8_t opt_level );
+
+void crc16_algorithm( const uint8_t* data, const uint32_t len,
+                      const crc_param_t* crc_params, uint16_t* p_crc );
+
 
 
 static void init_polynomial_even( uint8_t degree )
@@ -61,6 +71,7 @@ static void init_polynomial_even( uint8_t degree )
       break;
     case 16:
       polynomial = polynomial_16;
+      crc_calc_func = &calculate_crc16;
       break;
     case 32:
       polynomial = polynomial_32;
@@ -72,17 +83,73 @@ static void init_polynomial_even( uint8_t degree )
 }
 
 
-static uint16_t calculate_crc16( const char* file )
+void crc16_algorithm( const uint8_t* data, const uint32_t len,
+                      const crc_param_t* crc_params, uint16_t* p_crc )
+{
+  static uint8_t first_call = 0xFF;
+  uint16_t poly = 0x0000;
+  uint16_t crc  = 0x0000;
+  uint32_t i;
+  uint8_t j = 0x00, cur_byte = 0x00;
+
+  if( len >= UINT32_MAX )
+  {
+    ( void )fprintf( stderr, "Invalid nuber of bytes passed to crc algorithm.\n" );
+    return;
+  }
+
+  poly = crc_params->coeff.u_16;
+  crc  = *p_crc;
+
+  if( first_call )
+  {
+    first_call = 0x00;
+    crc ^= crc_params->initial_xor.u_16;
+  }
+
+  for( i = 0; i < len; i++ )
+  {
+    cur_byte = *( data + i );
+    crc ^= ( ( uint16_t )cur_byte ) << 8;
+
+    for( j = 0; j < 8; j++ )
+    {
+      if( crc & 0x8000 )
+      {
+        crc = ( crc << 1 ) ^ poly;
+      }
+      else
+      {
+        crc <<= 1;
+      }
+    }
+  }
+
+  *p_crc = crc;
+}
+
+
+static void calculate_crc16( const char* file, uint8_t opt_level )
 {
   int32_t  bytes_read = 0;
   uint8_t* buf        = NULL;
-  ssize_t  buf_len    = FILE_BUF_SIZE;
+  ssize_t  buf_len    = ( ssize_t )FILE_BUF_SIZE;
+  uint16_t crc16      = 0x0000U;
 
   while( ( bytes_read = walk_file( &buf, buf_len, file ) ) )
   {
     ( void )fprintf( stdout, "Bytes read: %d\n", bytes_read );
+    switch( opt_level )
+    {
+      case OPT_LEVEL_NONE:
+        crc16_algorithm( ( const uint8_t* )buf, ( const uint32_t )bytes_read, 
+                         ( const crc_param_t* )&polynomial, &crc16 );
+        break;
+      case OPT_LEVEL_LUT:
+        break;
+    }
   }
-  return 0xFFFF;
+  ( void )fprintf( stdout, "CRC16: %#06x\n", crc16 );
 }
 
 
@@ -90,7 +157,7 @@ void calculate_crc_from_file_bytewise( const char* file,
                                        uint8_t polynomial_degree )
 {
   init_polynomial_even( polynomial_degree );
-  calculate_crc16( file );
+  crc_calc_func( file, OPT_LEVEL_NONE );
 }
 
 
