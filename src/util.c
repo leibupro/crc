@@ -95,7 +95,7 @@ void check_reflect( uint8_t* buf, uint32_t n, uint8_t reflect )
 
 
 int32_t walk_file( uint8_t** buf, ssize_t buf_len, 
-                   const char* file )
+                   const char* file, uint8_t* more_fragments )
 {
   static uint8_t first_call = 0xFF;
   static uint8_t reset = 0x00;
@@ -167,7 +167,8 @@ int32_t walk_file( uint8_t** buf, ssize_t buf_len,
     /* we are at the end of the file and can free resources */
     ( void )close( fd );
     fd = ( -1 );
-    reset = 0xFF;
+    reset = 0xFFU;
+    *more_fragments = 0x00U;
   }
   else
   {
