@@ -74,6 +74,15 @@
 /* reflect remainder */      0x00U                        \
                            }
 
+#define CRC_16_KERMIT      {                              \
+/* polynomial degree */      16U,                         \
+/* coefficients */           { { 0x88U, 0x10U, 0x80U } }, \
+/* initial */                { { 0x00U, 0x00U } },        \
+/* final xor */              { { 0x00U, 0x00U } },        \
+/* reflect input */          0xFFU,                       \
+/* reflect remainder */      0xFFU                        \
+                           }
+
 
 /* some CRC 32 values */
 
@@ -104,7 +113,7 @@
  * which should be used by the program. */
 #define CRC_3_POLY_PARAM  CRC_3_WIKIPEDIA
 #define CRC_8_POLY_PARAM  CRC_8_CCITT
-#define CRC_16_POLY_PARAM CRC_16_CCITT_FALSE
+#define CRC_16_POLY_PARAM CRC_16_KERMIT
 #define CRC_32_POLY_PARAM CRC_32
 #define CRC_64_POLY_PARAM CRC_64_ISO
 

@@ -108,7 +108,10 @@ void crc16_algorithm( uint8_t* data, const uint32_t len,
   poly = crc_params->coeff.u_16;
   crc  = *p_crc;
     
-  check_reflect( data, len, crc_params->reflect_input );
+  if( crc_params->reflect_input )
+  {
+    reflect_bits_8( data, len );
+  }
 
   if( first_call )
   {
@@ -137,8 +140,11 @@ void crc16_algorithm( uint8_t* data, const uint32_t len,
   if( !more_fragments )
   {
     crc ^= crc_params->final_xor.u_16;
-    check_reflect( ( uint8_t* )&crc, CRC_16_LEN, 
-                   crc_params->reflect_remainder );
+
+    if( crc_params->reflect_remainder )
+    {
+      reflect_bits_16( &crc, 1U );
+    }
   }
 
   *p_crc = crc;
