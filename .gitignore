@@ -53,3 +53,7 @@ dkms.conf
 
 # bin folder
 bin/
+
+# lib folder
+lib/
+

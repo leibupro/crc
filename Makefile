@@ -36,44 +36,76 @@ CF := -std=gnu89 -Wall -Wextra -Werror -pedantic-errors -O3 -funroll-loops -flto
 LF := -std=gnu89 -flto -O3 -lrt -Wl,-v
 endif
 
-SRCDIR := ./src
-INCDIR := ./include
+LIBCF := -fPIC
 
-OBJDIR := ./obj
-BINDIR := ./bin
+SRCDIR  := ./src
+INCDIRS := -I./include
+
+OBJDIR    := ./obj
+LIBOBJDIR := ./libobj
+BINDIR    := ./bin
+LIBDIR    := ./lib
 
 BINARY := $(BINDIR)/crc
 
-SRC := $(SRCDIR)/crcbit.c
-SRC += $(SRCDIR)/crcbyte.c
-SRC += $(SRCDIR)/util.c
-SRC += $(SRCDIR)/main.c
+LIBFILE    := libcrc.so.1.0.1
+LIBDYN     := $(LIBDIR)/$(LIBFILE)
+LIBDYNNAME := libcrc.so.1
+LIBLINK_1  := $(LIBDIR)/libcrc.so
+LIBLINK_2  := $(LIBDIR)/$(LIBDYNNAME)
 
-OBJ := $(addprefix $(OBJDIR)/,$(notdir $(SRC:.c=.o)))
+SRC := $(SRCDIR)/crcbit.c  \
+       $(SRCDIR)/crcbyte.c \
+       $(SRCDIR)/util.c    \
+       $(SRCDIR)/main.c
+
+LIBSRC := $(SRCDIR)/crcbyte.c \
+          $(SRCDIR)/util.c
+
+OBJ    := $(addprefix $(OBJDIR)/,$(notdir $(SRC:.c=.o)))
+LIBOBJ := $(addprefix $(LIBOBJDIR)/,$(notdir $(LIBSRC:.c=.o)))
 
 VPATH := $(SRCDIR)
 
-CF += -I$(INCDIR)
 
-.PHONY: all clean
+.PHONY: all library clean
 
 all: $(BINARY)
 	$(SIZE) $(BINARY)
 	@echo -n "Used "
 	@$(LD) --version | grep "gcc"
 
+library: $(LIBDYN)
+	$(SIZE) $<
+	@echo -n "Used "
+	@$(LD) --version | grep "gcc"
+
 $(OBJDIR):
+	mkdir $@
+
+$(LIBOBJDIR):
 	mkdir $@
 
 $(BINDIR):
 	mkdir $@
 
+$(LIBDIR):
+	mkdir $@
+
 $(BINARY): $(BINDIR) $(OBJ)
 	$(LD) -o $@ $(LF) $(OBJ)
 
+$(LIBDYN): $(LIBDIR) $(LIBOBJ)
+	$(LD) -shared -Wl,-soname,$(LIBDYNNAME) -o $@ $(LIBOBJ)
+	ln -s $(LIBFILE) $(LIBLINK_1)
+	ln -s $(LIBFILE) $(LIBLINK_2)
+
 $(OBJDIR)/%.o: %.c $(OBJDIR)
-	$(CC) $(CF) -c $< -o $@
+	$(CC) $(CF) $(INCDIRS) -c $< -o $@
+
+$(LIBOBJDIR)/%.o: %.c $(LIBOBJDIR)
+	$(CC) $(CF) $(LIBCF) $(INCDIRS) -c $< -o $@
 
 clean:
-	rm -rf $(OBJDIR) $(BINDIR)
+	rm -rf $(OBJDIR) $(BINDIR) $(LIBOBJDIR) $(LIBDIR)
 
