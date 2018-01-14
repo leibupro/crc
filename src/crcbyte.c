@@ -145,6 +145,7 @@ void crc16_algorithm( uint8_t* data, const uint32_t len,
     {
       reflect_bits_16( &crc, 1U );
     }
+    first_call = 0xFFU;
   }
 
   *p_crc = crc;

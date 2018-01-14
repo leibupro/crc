@@ -76,6 +76,16 @@
 /* reflect remainder */      0xFFU                 \
                            }
 
+/* just for testing purposes */
+#define CRC_16_SHITTY      {                       \
+/* polynomial degree */      16U,                  \
+/* coefficients */           { { 0x21U, 0xFFU } }, \
+/* initial */                { { 0x00U, 0x00U } }, \
+/* final xor */              { { 0x00U, 0x00U } }, \
+/* reflect input */          0x00U,                \
+/* reflect remainder */      0x00U                 \
+                           }
+
 
 /* some CRC 32 values */
 
@@ -106,7 +116,7 @@
  * which should be used by the program. */
 #define CRC_3_POLY_PARAM  CRC_3_WIKIPEDIA
 #define CRC_8_POLY_PARAM  CRC_8_CCITT
-#define CRC_16_POLY_PARAM CRC_16_KERMIT
+#define CRC_16_POLY_PARAM CRC_16_CCITT_FALSE
 #define CRC_32_POLY_PARAM CRC_32
 #define CRC_64_POLY_PARAM CRC_64_ISO
 

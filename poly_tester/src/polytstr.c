@@ -54,10 +54,13 @@
 
 /* 2^48 Possibilities with 48 bit */
 /* #define NUM_INPUTS      281474976710656UL */
-#define NUM_INPUTS      0x8U
+#define NUM_INPUTS      0x30000U
 
 #define RESULTS_FILE      "./crc_occurrences.txt"
 #define HAMMING_DIST_FILE "./crc_hamming_distances.txt"
+#define STRING_BUF        256U
+
+#define MAX_HAMMING_DIST  48U
 
 typedef union
 {
@@ -87,8 +90,9 @@ static void ( *crc_16_algorithm_func )( uint8_t*, const uint32_t,
                                         const crc_param_t*, 
                                         uint16_t*, uint8_t ) = NULL;
 
-/* static crc_param_t crc_params = CRC_16_CCITT_FALSE; */
-static crc_param_t crc_params = CRC_16_KERMIT;
+static crc_param_t crc_params = CRC_16_CCITT_FALSE;
+/* static crc_param_t crc_params = CRC_16_KERMIT; */
+/* static crc_param_t crc_params = CRC_16_SHITTY; */
 
 static crc_16_results_t results_16 = { { 0x0000000000000000UL }, 
                                        { { 0x0000000000000000UL } } };
@@ -110,7 +114,11 @@ static void test_hamming_meter( void );
 static void file_dump_stats( void );
 static void write_crc_occurrences( void );
 static void write_hamming_distances( void );
+
 static void write_number_as_line( uint64_t number, FILE* file );
+static void write_number_pair_as_line( uint64_t number_a, uint64_t number_b, 
+                                       FILE* file );
+
 static FILE* open_file( const char* path );
 static void close_file( FILE* file );
 
@@ -160,7 +168,7 @@ static void* crc_16_worker( void* arg )
       temp_last = results_16.last_inputs[ crc16 ];
     }
     results_16.checksum_counts[ crc16 ]++;
-    results_16.last_inputs[ crc16 ] = crc_input;
+    results_16.last_inputs[ crc16 ].u_64 = crc_input.u_64;
     ( void )pthread_mutex_unlock( &results_lock );
     
     if( add_hamming_dist )
@@ -361,9 +369,22 @@ static void close_file( FILE* file )
 
 static void write_number_as_line( uint64_t number, FILE* file )
 {
-  char text[ 32U ] = { 0x00 };
+  char text[ STRING_BUF ] = { 0x00 };
 
-  ( void )snprintf( &text[ 0U ], 32U, "%ld\n", number );
+  ( void )snprintf( &text[ 0U ], STRING_BUF, "%ld\n", number );
+  if( !fputs( ( const char* )text, file ) )
+  {
+    ( void )fprintf( stderr, "can't write number to file.\n" );
+  }
+}
+
+
+static void write_number_pair_as_line( uint64_t number_a, uint64_t number_b, 
+                                       FILE* file )
+{
+  char text[ STRING_BUF ] = { 0x00 };
+
+  ( void )snprintf( &text[ 0U ], STRING_BUF, "%ld;%#014lx\n", number_a, number_b );
   if( !fputs( ( const char* )text, file ) )
   {
     ( void )fprintf( stderr, "can't write number to file.\n" );
@@ -380,9 +401,10 @@ static void write_crc_occurrences( void )
   
   for( i = 0U; i < 0x10000U; i++ )
   {
-    write_number_as_line( results_16.checksum_counts[ i ], results_file );
+    write_number_pair_as_line( results_16.checksum_counts[ i ], 
+                               results_16.last_inputs[ i ].u_64, 
+                               results_file );
   }
-  write_number_as_line( 177UL, results_file );
 
   close_file( results_file );
 }
@@ -390,6 +412,17 @@ static void write_crc_occurrences( void )
 
 static void write_hamming_distances( void )
 {
+  FILE* results_file = NULL;
+  uint8_t i;
+
+  results_file = open_file( ( const char* )HAMMING_DIST_FILE );
+  
+  for( i = 0U; i <= MAX_HAMMING_DIST; i++ )
+  {
+    write_number_as_line( hamming_dists[ i ], results_file );
+  }
+
+  close_file( results_file );
 }
 
 
