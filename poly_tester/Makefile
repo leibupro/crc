@@ -39,7 +39,8 @@ CF := -std=gnu89 -Wall -Wextra -Werror -pedantic-errors -O3 -funroll-loops -flto
 LF := -std=gnu89 -flto -O3 -lrt -Wl,-v
 endif
 
-INCDIRS := -I../include
+INCDIRS := -I./include  \
+           -I../include
 LIBDIRS := -L../lib
 RPATH   := -Wl,-rpath=$(abspath ../lib)
 
@@ -54,7 +55,8 @@ BINDIR := ./bin
 
 BINARY := $(BINDIR)/polytstr
 
-SRC := $(SRCDIR)/polytstr.c
+SRC := $(SRCDIR)/polytstr.c \
+       $(SRCDIR)/hamming.c
 
 OBJ := $(addprefix $(OBJDIR)/,$(notdir $(SRC:.c=.o)))
 
