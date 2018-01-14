@@ -39,10 +39,13 @@ CF := -std=gnu89 -Wall -Wextra -Werror -pedantic-errors -O3 -funroll-loops -flto
 LF := -std=gnu89 -flto -O3 -lrt -Wl,-v
 endif
 
-INCDIRS := -I./include  \
-           -I../include
+# needed for Thaler's mtimer.h
+CF += -D__linux
+
+INCDIRS := -I../include \
+           -I./include
 LIBDIRS := -L../lib
-RPATH   := -Wl,-rpath=$(abspath ../lib)
+RPATH   := -Wl,-rpath="$(abspath ../lib)"
 
 SRCDIR := ./src
 

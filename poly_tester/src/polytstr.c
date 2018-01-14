@@ -41,18 +41,23 @@
 
 #include <pthread.h>
 #include <assert.h>
+#include <mtimer.h>
 
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
 
 #define NUM_THREADS     2U
 #define NUM_INPUT_BYTES 6U
 
 /* 2^48 Possibilities with 48 bit */
 /* #define NUM_INPUTS      281474976710656UL */
-#define NUM_INPUTS      0x100000000UL
+#define NUM_INPUTS      0x8U
+
+#define RESULTS_FILE      "./crc_occurrences.txt"
+#define HAMMING_DIST_FILE "./crc_hamming_distances.txt"
 
 typedef union
 {
@@ -101,6 +106,14 @@ static uint64_t hamming_dists[ 52 ] = { 0UL };
 /* local functions of this module. */
 
 static void test_hamming_meter( void );
+
+static void file_dump_stats( void );
+static void write_crc_occurrences( void );
+static void write_hamming_distances( void );
+static void write_number_as_line( uint64_t number, FILE* file );
+static FILE* open_file( const char* path );
+static void close_file( FILE* file );
+
 static void init( void );
 static void deinit( void );
 static void create_thread_params( uint8_t num_threads, 
@@ -315,16 +328,99 @@ static void test_hamming_meter( void )
 }
 
 
+static FILE* open_file( const char* path )
+{
+  FILE* file = NULL;
+  file = fopen( path, ( const char* )"w" );
+  if( !file )
+  {
+    ( void )fprintf( stderr, "Error opening file for writing. reason: [ %s ]\n",
+                     strerror( errno ) );
+    exit( EXIT_FAILURE );
+  }
+  return file;
+}
+
+
+static void close_file( FILE* file )
+{
+  if( fflush( file ) )
+  {
+    ( void )fprintf( stderr, "can't flush file stream. reason: [ %s ]\n",
+                     strerror( errno ) );
+    exit( EXIT_FAILURE );
+  }
+  if( fclose( file ) )
+  {
+    ( void )fprintf( stderr, "can't close file stream. reason: [ %s ]\n",
+                     strerror( errno ) );
+    exit( EXIT_FAILURE );
+  }
+}
+
+
+static void write_number_as_line( uint64_t number, FILE* file )
+{
+  char text[ 32U ] = { 0x00 };
+
+  ( void )snprintf( &text[ 0U ], 32U, "%ld\n", number );
+  if( !fputs( ( const char* )text, file ) )
+  {
+    ( void )fprintf( stderr, "can't write number to file.\n" );
+  }
+}
+
+
+static void write_crc_occurrences( void )
+{
+  FILE* results_file = NULL;
+  uint32_t i;
+
+  results_file = open_file( ( const char* )RESULTS_FILE );
+  
+  for( i = 0U; i < 0x10000U; i++ )
+  {
+    write_number_as_line( results_16.checksum_counts[ i ], results_file );
+  }
+  write_number_as_line( 177UL, results_file );
+
+  close_file( results_file );
+}
+
+
+static void write_hamming_distances( void )
+{
+}
+
+
+static void file_dump_stats( void )
+{
+  write_crc_occurrences();
+  write_hamming_distances();
+}
+
+
 int main( void )
 {
   uint32_t tids[ NUM_THREADS ];
-
+  ctimer_t ct;
+  
+  initCTimer( ct, MONOTONIC );
   test_hamming_meter();
 
   init();
+
+  startCTimer( ct );
   create_threads( &tids[ 0 ] );
   join_threads();
+  stopCTimer( ct );
+  
   deinit();
+
+  ( void )fprintf( stdout, "\n\nCRC calculation time stats:\n" );
+  printCTime( ct );
+
+  file_dump_stats();
 
   return EXIT_SUCCESS;
 }

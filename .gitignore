@@ -57,3 +57,7 @@ bin/
 # lib folder
 lib/
 
+# result files
+*crc_occurrences.txt
+*crc_hamming_distances.txt
+

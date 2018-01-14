@@ -34,7 +34,7 @@ uint32_t get_hamming_distance( const uint8_t* field_a,
 
   if( len >= UINT16_MAX )
   {
-    ( void )fprintf( stderr, "Invalid nuber of bytes passed to crc algorithm.\n" );
+    ( void )fprintf( stderr, "Invalid number of bytes passed to crc algorithm.\n" );
     return distance_sum;
   }
 

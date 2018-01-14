@@ -101,7 +101,7 @@ void crc16_algorithm( uint8_t* data, const uint32_t len,
 
   if( len >= UINT32_MAX )
   {
-    ( void )fprintf( stderr, "Invalid nuber of bytes passed to crc algorithm.\n" );
+    ( void )fprintf( stderr, "Invalid number of bytes passed to crc algorithm.\n" );
     return;
   }
 
