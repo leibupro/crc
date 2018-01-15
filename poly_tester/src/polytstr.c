@@ -54,7 +54,7 @@
 
 /* 2^48 Possibilities with 48 bit */
 /* #define NUM_INPUTS      281474976710656UL */
-#define NUM_INPUTS      0x30000U
+#define NUM_INPUTS      0x100000000UL
 
 #define RESULTS_FILE      "./crc_occurrences.txt"
 #define HAMMING_DIST_FILE "./crc_hamming_distances.txt"

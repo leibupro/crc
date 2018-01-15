@@ -34,9 +34,11 @@ ifdef dbg
 CF := -std=gnu89 -Wall -Wextra -Werror -pedantic-errors -g -O0
 CF += -DDBG
 LF := -std=gnu89 -lrt -Wl,-v
+SUBMAKE_VAR := dbg=1
 else
 CF := -std=gnu89 -Wall -Wextra -Werror -pedantic-errors -O3 -funroll-loops -flto
 LF := -std=gnu89 -flto -O3 -lrt -Wl,-v
+SUBMAKE_VAR := 
 endif
 
 # needed for Thaler's mtimer.h
@@ -63,6 +65,10 @@ SRC := $(SRCDIR)/polytstr.c \
 
 OBJ := $(addprefix $(OBJDIR)/,$(notdir $(SRC:.c=.o)))
 
+# for cleaning the library to rebuild
+LIB_BUNDLE := ../lib \
+              ../libobj
+
 VPATH := $(SRCDIR)
 
 
@@ -82,7 +88,7 @@ $(BINDIR):
 
 
 $(LIBFILE):
-	cd .. && $(MAKE) library
+	cd .. && $(MAKE) library $(SUBMAKE_VAR)
 
 
 $(BINARY): $(LIBFILE) $(BINDIR) $(OBJ)
@@ -94,5 +100,5 @@ $(OBJDIR)/%.o: %.c $(OBJDIR)
 
 
 clean:
-	rm -rf $(OBJDIR) $(BINDIR)
+	rm -rf $(OBJDIR) $(BINDIR) $(LIB_BUNDLE)
 
