@@ -60,7 +60,13 @@
 #define HAMMING_DIST_FILE "./crc_hamming_distances.txt"
 #define STRING_BUF        256U
 
-#define MAX_HAMMING_DIST  48U
+/* dependant of input field lenght */
+#define MAX_HAMMING_DIST  ( NUM_INPUT_BYTES * 8U )
+
+/* thread buffer size for calculations 
+ * Required memory => sizeof( crc_16_pair_t ) * NUM_THREADS */
+#define WORKER_BUF_SIZE   80000000U
+
 
 typedef union
 {
@@ -83,6 +89,13 @@ typedef struct
 }
 crc_16_results_t;
 
+typedef struct
+{
+  crc_input_t input;
+  uint16_t crc16;
+}
+crc_16_pair_t;
+
 
 /* module local variables of this module. */
 
@@ -98,12 +111,13 @@ static crc_16_results_t results_16 = { { 0x0000000000000000UL },
                                        { { 0x0000000000000000UL } } };
 
 static pthread_mutex_t results_lock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t hamming_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t threads[ NUM_THREADS ];
 
 static thread_params_t thread_params[ NUM_THREADS ];
 
 static uint64_t hamming_dists[ 52 ] = { 0UL };
+
+static crc_16_pair_t* thread_bufs[ NUM_THREADS ] = { NULL };
 
 /* *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~ */
 
@@ -131,7 +145,55 @@ static void* crc_16_worker( void* arg );
 static void create_threads( uint32_t* tids );
 static void join_threads( void );
 
+static void synchronize_results( uint32_t tid, uint32_t num_results );
+
 /* *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~ */
+
+
+static void synchronize_results( uint32_t tid, uint32_t num_results )
+{
+  uint32_t i;
+  crc_16_pair_t* buf = NULL;
+  crc_16_pair_t* cur_pair = NULL;
+  uint8_t add_hamming_dist = 0x00U;
+  uint32_t hamming_dist;
+  crc_input_t temp_last;
+
+  buf = thread_bufs[ tid ];
+  
+  ( void )pthread_mutex_lock( &results_lock );
+
+  for( i = 0U; i < num_results; i++ )
+  {
+    cur_pair = ( buf + i );
+    /*
+     * The hamming distance should only be recorded if
+     * the current crc checksum was already calculated
+     * at least once.
+     **/
+    if( results_16.checksum_counts[ cur_pair->crc16 ] )
+    {
+      add_hamming_dist = 0xFFU;
+      temp_last = results_16.last_inputs[ cur_pair->crc16 ];
+    }
+    results_16.checksum_counts[ cur_pair->crc16 ]++;
+    results_16.last_inputs[ cur_pair->crc16 ].u_64 = cur_pair->input.u_64;
+
+    if( add_hamming_dist )
+    {
+      hamming_dist = get_hamming_distance( 
+                       ( const uint8_t* )&cur_pair->input.u_8_arr[ 0U ], 
+                       ( const uint8_t* )&temp_last.u_8_arr[ 0U ], 
+                       ( uint16_t )NUM_INPUT_BYTES );
+
+      hamming_dists[ hamming_dist ]++;
+    }
+
+    add_hamming_dist = 0x00U;
+  }
+
+  ( void )pthread_mutex_unlock( &results_lock );
+}
 
 
 static void* crc_16_worker( void* arg )
@@ -140,11 +202,12 @@ static void* crc_16_worker( void* arg )
   crc_input_t crc_input;
   crc_input_t crc_input_loop;
   uint16_t crc16 = 0x0000U;
-  uint32_t hamming_dist;
-  crc_input_t temp_last;
-  uint8_t add_hamming_dist = 0x00U;
+  uint32_t t_buf_idx = 0U;
+  crc_16_pair_t* buf = NULL;
+  crc_16_pair_t* cur_pair = NULL;
 
   tid = *( ( uint32_t* )arg );
+  buf = thread_bufs[ tid ];
 
   for( crc_input.u_64 = thread_params[ tid ].start; 
        crc_input.u_64 < thread_params[ tid ].end; 
@@ -157,36 +220,23 @@ static void* crc_16_worker( void* arg )
                            0xFFU,   /* First call, yes */
                            0x00U ); /* More fragments, no */
 
-    ( void )pthread_mutex_lock( &results_lock );
-    /*
-     * The hamming distance should only be recorded if
-     * the current crc checksum was already calculated
-     * at least once.
-     **/
-    if( results_16.checksum_counts[ crc16 ] )
-    {
-      add_hamming_dist = 0xFFU;
-      temp_last = results_16.last_inputs[ crc16 ];
-    }
-    results_16.checksum_counts[ crc16 ]++;
-    results_16.last_inputs[ crc16 ].u_64 = crc_input.u_64;
-    ( void )pthread_mutex_unlock( &results_lock );
-    
-    if( add_hamming_dist )
-    {
-      hamming_dist = get_hamming_distance( 
-                       ( const uint8_t* )&crc_input.u_8_arr[ 0U ], 
-                       ( const uint8_t* )&temp_last.u_8_arr[ 0U ], 
-                       ( uint16_t )NUM_INPUT_BYTES );
+    cur_pair = ( buf + t_buf_idx );
 
-      ( void )pthread_mutex_lock( &hamming_lock );
-      hamming_dists[ hamming_dist ]++;
-      ( void )pthread_mutex_unlock( &hamming_lock );
+    cur_pair->input.u_64 = crc_input.u_64;
+    cur_pair->crc16 = crc16;
+    t_buf_idx++;
+
+    if( t_buf_idx >= WORKER_BUF_SIZE )
+    {
+      synchronize_results( tid, t_buf_idx );
+      t_buf_idx = 0U;
     }
 
-    add_hamming_dist = 0x00U;
     crc16 = 0x0000U;
   }
+
+  /* synchronize remaining results if there are any */
+  synchronize_results( tid, t_buf_idx );
   
   ( void )fprintf( stdout, "Hello from thread %d\n", tid );
   ( void )fflush( stdout );
@@ -197,10 +247,10 @@ static void* crc_16_worker( void* arg )
 
 static void init( void )
 {
+  uint8_t i;
   create_thread_params( NUM_THREADS, NUM_INPUTS );
 
-  if( ( pthread_mutex_init( &results_lock, NULL ) |
-        pthread_mutex_init( &hamming_lock, NULL ) ) )
+  if( pthread_mutex_init( &results_lock, NULL ) )
   {
     ( void )fprintf( stderr, "mutex init failed, exiting ...\n");
     ( void )fflush( stderr );
@@ -213,17 +263,38 @@ static void init( void )
   crc_16_algorithm_func = &crc16_algorithm_lut;
   /* Lookup table has to be initialized. */
   init_lut_crc_16( ( const crc_param_t* )&crc_params );
+
+  /* initialize thread buffers */
+  for( i = 0U; i < NUM_THREADS; i++ )
+  {
+    if( !( thread_bufs[ i ] = 
+             ( crc_16_pair_t* )calloc( ( size_t )WORKER_BUF_SIZE, 
+                                       sizeof( crc_16_pair_t ) ) ) )
+    {
+      ( void )fprintf( stderr, "Failed to allocate memory for thread buffers.\n" );
+      ( void )fflush( stderr );
+      exit( EXIT_FAILURE );
+    }
+  }
 }
 
 
 static void deinit( void )
 {
-  if( ( pthread_mutex_destroy( &results_lock ) | 
-        pthread_mutex_destroy( &hamming_lock ) ) )
+  uint8_t i;
+
+  if( pthread_mutex_destroy( &results_lock ) ) 
   {
     ( void )fprintf( stderr, "mutex destroy failed, exiting ...\n" );
     ( void )fflush( stderr );
     exit( EXIT_FAILURE );
+  }
+
+  /* free thread buffer space */
+  for( i = 0U; i < NUM_THREADS; i++ )
+  {
+    free( ( void* )thread_bufs[ i ] );
+    thread_bufs[ i ] = NULL;
   }
 }
 
