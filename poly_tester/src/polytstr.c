@@ -88,7 +88,7 @@ crc_16_results_t;
 
 static void ( *crc_16_algorithm_func )( uint8_t*, const uint32_t, 
                                         const crc_param_t*, 
-                                        uint16_t*, uint8_t ) = NULL;
+                                        uint16_t*, uint8_t, uint8_t ) = NULL;
 
 static crc_param_t crc_params = CRC_16_CCITT_FALSE;
 /* static crc_param_t crc_params = CRC_16_KERMIT; */
@@ -154,7 +154,8 @@ static void* crc_16_worker( void* arg )
     crc_16_algorithm_func( &crc_input_loop.u_8_arr[ 0U ], 
                            ( const uint32_t )NUM_INPUT_BYTES,
                            ( const crc_param_t* )&crc_params, &crc16,
-                           0x00U );
+                           0xFFU,   /* First call, yes */
+                           0x00U ); /* More fragments, no */
 
     ( void )pthread_mutex_lock( &results_lock );
     /*
@@ -206,8 +207,12 @@ static void init( void )
     exit( EXIT_FAILURE );
   }
 
-  /* function from the crc library gets assigned here */
-  crc_16_algorithm_func = &crc16_algorithm;
+  /* Function from the crc library gets assigned here.
+   * We use the lookup based crc calculation due to
+   * performance reasons. */
+  crc_16_algorithm_func = &crc16_algorithm_lut;
+  /* Lookup table has to be initialized. */
+  init_lut_crc_16( ( const crc_param_t* )&crc_params );
 }
 
 

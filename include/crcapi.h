@@ -30,7 +30,15 @@
 
 void crc16_algorithm( uint8_t* data, const uint32_t len, 
                       const crc_param_t* crc_params, uint16_t* p_crc,
+                      uint8_t first_call,
                       uint8_t more_fragments );
+
+void init_lut_crc_16( const crc_param_t* crc_params );
+
+void crc16_algorithm_lut( uint8_t* data, const uint32_t len,
+                          const crc_param_t* crc_params, uint16_t* p_crc,
+                          uint8_t first_call,
+                          uint8_t more_fragments );
 
 #endif /* __CRC_API_H_ */
 
