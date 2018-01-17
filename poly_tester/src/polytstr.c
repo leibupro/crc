@@ -42,6 +42,7 @@
 #include <pthread.h>
 #include <assert.h>
 #include <mtimer.h>
+#include <time.h>
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -67,6 +68,8 @@
  * Required memory => sizeof( crc_16_pair_t ) * NUM_THREADS */
 #define WORKER_BUF_SIZE   80000000U
 
+#define TIME_ADD          .0f
+
 
 typedef union
 {
@@ -77,8 +80,9 @@ crc_input_t;
 
 typedef struct
 {
-  uint64_t start;
-  uint64_t end;
+  uint64_t        start;
+  uint64_t        end;
+  struct timespec init_sleep;
 }
 thread_params_t;
 
@@ -147,7 +151,73 @@ static void join_threads( void );
 
 static void synchronize_results( uint32_t tid, uint32_t num_results );
 
+static void calculate_initial_sleep_times( void );
+static struct timespec get_timespec_from_double( double time );
+
 /* *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~ */
+
+
+static struct timespec get_timespec_from_double( double time )
+{
+  struct timespec ts;
+  time_t seconds;
+  long nanoseconds;
+  
+  seconds     = ( time_t )time;
+  nanoseconds = ( ( long )( time * ( double )1000000000U ) ) - ( long )seconds;
+  ts.tv_sec  = seconds;
+  ts.tv_nsec = nanoseconds;
+
+  return ts;
+}
+
+
+static void calculate_initial_sleep_times( void )
+{
+  crc_input_t crc_input;
+  crc_input_t crc_input_loop;
+  uint16_t crc16 = 0x0000U;
+  crc_16_pair_t* buf = NULL;
+  crc_16_pair_t* cur_pair = NULL;
+  ctimer_t ct;
+  double estimated_time = .0f;
+  uint8_t i;
+  
+  initCTimer( ct, MONOTONIC );
+  
+  buf = thread_bufs[ 0U ];
+  
+  startCTimer( ct );
+
+  for( crc_input.u_64 = 0UL; crc_input.u_64 < WORKER_BUF_SIZE; crc_input.u_64++ )
+  {
+    crc_input_loop = crc_input;
+    crc_16_algorithm_func( &crc_input_loop.u_8_arr[ 0U ], 
+                           ( const uint32_t )NUM_INPUT_BYTES,
+                           ( const crc_param_t* )&crc_params, &crc16,
+                           0xFFU,   /* First call, yes */
+                           0x00U ); /* More fragments, no */
+
+    cur_pair = ( buf + crc_input.u_64 );
+    
+    cur_pair->input.u_64 = crc_input.u_64;
+    cur_pair->crc16 = crc16;
+    
+    crc16 = 0x0000U;
+  }
+  
+  stopCTimer( ct );
+
+  estimated_time = getCTime( ct ) + TIME_ADD;
+
+  for( i = 0U; i < NUM_THREADS; i++ )
+  {
+    thread_params[ i ].init_sleep = get_timespec_from_double( estimated_time * i );
+  }
+
+  ( void )fprintf( stdout, "Estimated buffer fill time on one single core:\n" );
+  printCTime( ct );
+}
 
 
 static void synchronize_results( uint32_t tid, uint32_t num_results )
@@ -209,6 +279,8 @@ static void* crc_16_worker( void* arg )
   tid = *( ( uint32_t* )arg );
   buf = thread_bufs[ tid ];
 
+  ( void )nanosleep( &thread_params[ tid ].init_sleep, NULL );
+
   for( crc_input.u_64 = thread_params[ tid ].start; 
        crc_input.u_64 < thread_params[ tid ].end; 
        crc_input.u_64++ )
@@ -248,6 +320,7 @@ static void* crc_16_worker( void* arg )
 static void init( void )
 {
   uint8_t i;
+
   create_thread_params( NUM_THREADS, NUM_INPUTS );
 
   if( pthread_mutex_init( &results_lock, NULL ) )
@@ -276,6 +349,7 @@ static void init( void )
       exit( EXIT_FAILURE );
     }
   }
+  calculate_initial_sleep_times();
 }
 
 
