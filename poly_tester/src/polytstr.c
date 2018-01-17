@@ -179,15 +179,17 @@ static void calculate_initial_sleep_times( void )
   uint16_t crc16 = 0x0000U;
   crc_16_pair_t* buf = NULL;
   crc_16_pair_t* cur_pair = NULL;
-  ctimer_t ct;
+  ctimer_t ct_crc;
+  ctimer_t ct_sync;
   double estimated_time = .0f;
   uint8_t i;
   
-  initCTimer( ct, MONOTONIC );
+  initCTimer( ct_crc, MONOTONIC );
+  initCTimer( ct_sync, MONOTONIC );
   
   buf = thread_bufs[ 0U ];
   
-  startCTimer( ct );
+  startCTimer( ct_crc );
 
   for( crc_input.u_64 = 0UL; crc_input.u_64 < WORKER_BUF_SIZE; crc_input.u_64++ )
   {
@@ -205,10 +207,14 @@ static void calculate_initial_sleep_times( void )
     
     crc16 = 0x0000U;
   }
-  
-  stopCTimer( ct );
 
-  estimated_time = getCTime( ct ) + TIME_ADD;
+  stopCTimer( ct_crc );
+  
+  startCTimer( ct_sync );
+  synchronize_results( 0U, WORKER_BUF_SIZE );
+  stopCTimer( ct_sync );
+
+  estimated_time = getCTime( ct_crc ) + TIME_ADD;
 
   for( i = 0U; i < NUM_THREADS; i++ )
   {
@@ -216,7 +222,10 @@ static void calculate_initial_sleep_times( void )
   }
 
   ( void )fprintf( stdout, "Estimated buffer fill time on one single core:\n" );
-  printCTime( ct );
+  printCTime( ct_crc );
+
+  ( void )fprintf( stdout, "Estimated synchronisatzion time on one single core:\n" );
+  printCTime( ct_sync );
 }
 
 
