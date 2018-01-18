@@ -164,7 +164,8 @@ static struct timespec get_timespec_from_double( double time )
   long nanoseconds;
   
   seconds     = ( time_t )time;
-  nanoseconds = ( ( long )( time * ( double )1000000000U ) ) - ( long )seconds;
+  nanoseconds = ( ( long )( time * ( double )1000000000U ) ) - 
+                ( ( long )seconds * 1000000000U );
   ts.tv_sec  = seconds;
   ts.tv_nsec = nanoseconds;
 
@@ -213,6 +214,10 @@ static void calculate_initial_sleep_times( void )
   startCTimer( ct_sync );
   synchronize_results( 0U, WORKER_BUF_SIZE );
   stopCTimer( ct_sync );
+
+  /* clear these results again. */
+  ( void )memset( ( void* )&results_16, 0x00000000, sizeof( crc_16_results_t ) );
+  ( void )memset( ( void* )&hamming_dists[ 0U ], 0x00000000, sizeof( uint64_t ) * 52 );
 
   estimated_time = getCTime( ct_crc ) + TIME_ADD;
 
