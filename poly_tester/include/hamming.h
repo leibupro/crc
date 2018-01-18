@@ -28,5 +28,8 @@
 uint32_t get_hamming_distance( const uint8_t* field_a, 
                                const uint8_t* field_b, uint16_t len );
 
+/* works only with two 64 bit integer values as input */
+uint8_t get_hamming_distance_opt( uint64_t field_a, uint64_t field_b );
+
 #endif /* __HAMMING_H_ */
 

@@ -260,10 +260,8 @@ static void synchronize_results( uint32_t tid, uint32_t num_results )
 
     if( add_hamming_dist )
     {
-      hamming_dist = get_hamming_distance( 
-                       ( const uint8_t* )&cur_pair->input.u_8_arr[ 0U ], 
-                       ( const uint8_t* )&temp_last.u_8_arr[ 0U ], 
-                       ( uint16_t )NUM_INPUT_BYTES );
+      hamming_dist = ( uint32_t )get_hamming_distance_opt( 
+                                   cur_pair->input.u_64, temp_last.u_64 );
 
       hamming_dists[ hamming_dist ]++;
     }
@@ -463,6 +461,10 @@ static void test_hamming_meter( void )
   uint8_t field_b[] = { 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU };
   uint8_t field_c[] = { 0xFFU, 0xFFU, 0x00U, 0x77U, 0xFFU, 0xFFU };
 
+  uint64_t integer_a = 0x0000000000000000UL;
+  uint64_t integer_b = 0x0000FFFFFFFFFFFFUL;
+  uint64_t integer_c = 0x0000FFFF7700FFFFUL;
+
   hamming_dist = get_hamming_distance( 
                    ( const uint8_t* )&field_a[ 0U ], 
                    ( const uint8_t* )&field_b[ 0U ], 
@@ -491,6 +493,21 @@ static void test_hamming_meter( void )
                    ( const uint8_t* )&field_b[ 0U ], 
                    ( const uint8_t* )&field_c[ 0U ], 
                    ( uint16_t )NUM_INPUT_BYTES );
+  assert( hamming_dist == 10U );
+
+  hamming_dist = ( uint32_t )get_hamming_distance_opt( integer_a, integer_b );
+  assert( hamming_dist == 48U );
+  
+  hamming_dist = ( uint32_t )get_hamming_distance_opt( integer_a, integer_a );
+  assert( hamming_dist == 0U );
+  
+  hamming_dist = ( uint32_t )get_hamming_distance_opt( integer_b, integer_b );
+  assert( hamming_dist == 0U );
+  
+  hamming_dist = ( uint32_t )get_hamming_distance_opt( integer_a, integer_c );
+  assert( hamming_dist == 38U );
+  
+  hamming_dist = ( uint32_t )get_hamming_distance_opt( integer_b, integer_c );
   assert( hamming_dist == 10U );
 }
 

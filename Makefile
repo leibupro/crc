@@ -32,7 +32,7 @@ CF += -DDBG
 CF += -DFILE_BUF_SIZE=5U
 LF := -std=gnu89 -lrt -Wl,-v
 else
-CF := -std=gnu89 -Wall -Wextra -Werror -pedantic-errors -O3 -funroll-loops -flto
+CF := -std=gnu89 -Wall -Wextra -Werror -pedantic-errors -O3 -fforce-addr -funroll-loops -frerun-cse-after-loop -frerun-loop-opt -falign-functions=8 -flto
 LF := -std=gnu89 -flto -O3 -lrt -Wl,-v
 endif
 
