@@ -31,6 +31,17 @@
 #include <stdint.h>
 #include <stdio.h>
 
+
+/* This function is only available on the
+ * GNU C Compiler. */
+static inline int8_t gcc_builtin_bitcount( uint64_t n );
+
+static inline int8_t parallel_bitcount( uint64_t n );
+
+
+static int8_t ( *bitcount_func )( uint64_t ) = &gcc_builtin_bitcount;
+
+
 uint32_t get_hamming_distance( const uint8_t* field_a, 
                                const uint8_t* field_b, uint16_t len )
 {
@@ -90,11 +101,17 @@ static inline int8_t parallel_bitcount( uint64_t n )
 }
 
 
+static inline int8_t gcc_builtin_bitcount( uint64_t n )
+{
+  return ( int8_t )__builtin_popcountl( n );
+}
+
+
 /* works only with two 64 bit integer values as input */
 uint8_t get_hamming_distance_opt( uint64_t field_a, uint64_t field_b )
 {
   uint64_t cur_xor;
   cur_xor = field_a ^ field_b;
-  return ( uint8_t )parallel_bitcount( cur_xor );
+  return ( uint8_t )bitcount_func( cur_xor );
 }
 
