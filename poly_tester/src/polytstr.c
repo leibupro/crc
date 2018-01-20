@@ -255,8 +255,7 @@ static void calculate_initial_sleep_times( void )
     thread_params[ i ].init_sleep = get_timespec_from_double( estimated_init_sleep_time * i );
     if( time_delta < .0f )
     {
-      time_delta *= -1;
-      thread_params[ i ].balance_sleep_crc = get_timespec_from_double( time_delta );
+      thread_params[ i ].balance_sleep_crc = get_timespec_from_double( time_delta * -1 );
     }
     else
     {
@@ -272,6 +271,10 @@ static void calculate_initial_sleep_times( void )
   ( void )fprintf( stdout, "Estimated mean of synchronisatzion time on one single core:\n"
                            "%12.6f seconds\n", estimated_sync_time );
   
+  if( time_delta < .0f )
+  {
+    time_delta *= -1;
+  }
   ( void )fprintf( stdout, "Balance time:\n"
                            "%12.6f seconds\n\n"
                            "Calculating CRC checksums ...\n", time_delta );
