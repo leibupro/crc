@@ -49,8 +49,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/param.h>
 
-#define NUM_THREADS     2U
+#define NUM_THREADS     4U
 #define NUM_INPUT_BYTES 6U
 
 /* 2^48 Possibilities with 48 bit */
@@ -68,7 +69,7 @@
  * Required memory => sizeof( crc_16_pair_t ) * NUM_THREADS */
 #define WORKER_BUF_SIZE   80000000U
 
-#define TIME_ADD          .0f
+#define NUM_TIME_MESUREMENTS 5U
 
 
 typedef union
@@ -83,6 +84,7 @@ typedef struct
   uint64_t        start;
   uint64_t        end;
   struct timespec init_sleep;
+  struct timespec balance_sleep_crc;
 }
 thread_params_t;
 
@@ -182,55 +184,97 @@ static void calculate_initial_sleep_times( void )
   crc_16_pair_t* cur_pair = NULL;
   ctimer_t ct_crc;
   ctimer_t ct_sync;
-  double estimated_time = .0f;
+  double estimated_crc_time  = .0f;
+  double estimated_sync_time = .0f;
+  double estimated_init_sleep_time = .0f;
+  double time_delta = .0f;
+  uint8_t h;
   uint8_t i;
+
+  ( void )fprintf( stdout, "Please hold the line... Calculating sleep times\n"
+                           "for an optimal pipline processing.\n" );
   
+  buf = thread_bufs[ 0U ];
+  thread_params[ 0U ].balance_sleep_crc.tv_sec  = 0U;
+  thread_params[ 0U ].balance_sleep_crc.tv_nsec = 0UL;
+
   initCTimer( ct_crc, MONOTONIC );
   initCTimer( ct_sync, MONOTONIC );
   
-  buf = thread_bufs[ 0U ];
-  
-  startCTimer( ct_crc );
+  for( h = 0x00U; h < NUM_TIME_MESUREMENTS; h++ )
+  {  
+    startCTimer( ct_crc );
 
-  for( crc_input.u_64 = 0UL; crc_input.u_64 < WORKER_BUF_SIZE; crc_input.u_64++ )
-  {
-    crc_input_loop = crc_input;
-    crc_16_algorithm_func( &crc_input_loop.u_8_arr[ 0U ], 
-                           ( const uint32_t )NUM_INPUT_BYTES,
-                           ( const crc_param_t* )&crc_params, &crc16,
-                           0xFFU,   /* First call, yes */
-                           0x00U ); /* More fragments, no */
+    for( crc_input.u_64 = 0UL; crc_input.u_64 < WORKER_BUF_SIZE; crc_input.u_64++ )
+    {
+      crc_input_loop = crc_input;
+      crc_16_algorithm_func( &crc_input_loop.u_8_arr[ 0U ], 
+                             ( const uint32_t )NUM_INPUT_BYTES,
+                             ( const crc_param_t* )&crc_params, &crc16,
+                             0xFFU,   /* First call, yes */
+                             0x00U ); /* More fragments, no */
 
-    cur_pair = ( buf + crc_input.u_64 );
+      cur_pair = ( buf + crc_input.u_64 );
+      
+      cur_pair->input.u_64 = crc_input.u_64;
+      cur_pair->crc16 = crc16;
+      
+      crc16 = 0x0000U;
+    }
+
+    stopCTimer( ct_crc );
     
-    cur_pair->input.u_64 = crc_input.u_64;
-    cur_pair->crc16 = crc16;
-    
-    crc16 = 0x0000U;
+    startCTimer( ct_sync );
+    synchronize_results( 0U, WORKER_BUF_SIZE );
+    stopCTimer( ct_sync );
+
+    /* clear these results again. */
+    ( void )memset( ( void* )&results_16, 0x00000000, sizeof( crc_16_results_t ) );
+    ( void )memset( ( void* )&hamming_dists[ 0U ], 0x00000000, sizeof( uint64_t ) * 52 );
+
+    estimated_crc_time  += getCTime( ct_crc );
+    estimated_sync_time += getCTime( ct_sync );
   }
 
-  stopCTimer( ct_crc );
-  
-  startCTimer( ct_sync );
-  synchronize_results( 0U, WORKER_BUF_SIZE );
-  stopCTimer( ct_sync );
+  if( NUM_TIME_MESUREMENTS )
+  {
+    estimated_crc_time  /= ( double )NUM_TIME_MESUREMENTS;
+    estimated_sync_time /= ( double )NUM_TIME_MESUREMENTS;
+  }
+  else
+  {
+    ( void )fprintf( stderr, "Division by zero, redefine NUM_TIME_MESUREMENTS.\n" );
+    exit( EXIT_FAILURE );
+  }
 
-  /* clear these results again. */
-  ( void )memset( ( void* )&results_16, 0x00000000, sizeof( crc_16_results_t ) );
-  ( void )memset( ( void* )&hamming_dists[ 0U ], 0x00000000, sizeof( uint64_t ) * 52 );
-
-  estimated_time = getCTime( ct_crc ) + TIME_ADD;
+  estimated_init_sleep_time = MAX( estimated_crc_time, estimated_sync_time );
+  time_delta = estimated_crc_time - estimated_sync_time;
 
   for( i = 0U; i < NUM_THREADS; i++ )
   {
-    thread_params[ i ].init_sleep = get_timespec_from_double( estimated_time * i );
+    thread_params[ i ].init_sleep = get_timespec_from_double( estimated_init_sleep_time * i );
+    if( time_delta < .0f )
+    {
+      time_delta *= -1;
+      thread_params[ i ].balance_sleep_crc = get_timespec_from_double( time_delta );
+    }
+    else
+    {
+      thread_params[ i ].balance_sleep_crc.tv_sec  = 0U;
+      thread_params[ i ].balance_sleep_crc.tv_nsec = 0UL;
+      time_delta = .0f;
+    }
   }
 
-  ( void )fprintf( stdout, "Estimated buffer fill time on one single core:\n" );
-  printCTime( ct_crc );
+  ( void )fprintf( stdout, "Estimated mean of buffer fill time on one single core:\n"
+                           "%12.6f seconds\n", estimated_crc_time );
 
-  ( void )fprintf( stdout, "Estimated synchronisatzion time on one single core:\n" );
-  printCTime( ct_sync );
+  ( void )fprintf( stdout, "Estimated mean of synchronisatzion time on one single core:\n"
+                           "%12.6f seconds\n", estimated_sync_time );
+  
+  ( void )fprintf( stdout, "Balance time:\n"
+                           "%12.6f seconds\n\n"
+                           "Calculating CRC checksums ...\n", time_delta );
 }
 
 
@@ -312,6 +356,11 @@ static void* crc_16_worker( void* arg )
 
     if( t_buf_idx >= WORKER_BUF_SIZE )
     {
+      if( thread_params[ tid ].balance_sleep_crc.tv_sec ||
+          thread_params[ tid ].balance_sleep_crc.tv_nsec )
+      {
+        ( void )nanosleep( &thread_params[ tid ].balance_sleep_crc, NULL );
+      }
       synchronize_results( tid, t_buf_idx );
       t_buf_idx = 0U;
     }

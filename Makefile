@@ -27,13 +27,9 @@ LD := $(CC)
 SIZE := size
 
 ifdef dbg
-CF := -std=gnu89 -Wall -Wextra -Werror -pedantic-errors -g -O0
-CF += -DDBG
-CF += -DFILE_BUF_SIZE=5U
-LF := -std=gnu89 -lrt -Wl,-v
+include ./flags_debug.mk
 else
-CF := -std=gnu89 -Wall -Wextra -Werror -pedantic-errors -O3 -fforce-addr -funroll-loops -frerun-cse-after-loop -frerun-loop-opt -falign-functions=8 -flto
-LF := -std=gnu89 -flto -O3 -lrt -Wl,-v
+include ./flags_optimize.mk
 endif
 
 LIBCF := -fPIC
