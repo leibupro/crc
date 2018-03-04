@@ -49,7 +49,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
-#include <sys/param.h>
 
 #define NUM_THREADS     4U
 #define NUM_INPUT_BYTES 6U
@@ -67,10 +66,10 @@
 
 /* thread buffer size for calculations 
  * Required memory => sizeof( crc_16_pair_t ) * NUM_THREADS */
-#define WORKER_BUF_SIZE   80000000U
+#define WORKER_BUF_SIZE      80000000U
 
-#define NUM_TIME_MESUREMENTS 5U
-
+#define HAMMING_DIST_SPACE         52U
+#define POSSIBLE_CRC_16_SUMS  0x10000U
 
 typedef union
 {
@@ -81,17 +80,17 @@ crc_input_t;
 
 typedef struct
 {
-  uint64_t        start;
-  uint64_t        end;
-  struct timespec init_sleep;
-  struct timespec balance_sleep_crc;
+  uint64_t         start;
+  uint64_t         end;
+  crc_16_results_t partial_results;
+  uint64_t         partial_hamming_dists[ HAMMING_DIST_SPACE ];
 }
 thread_params_t;
 
 typedef struct
 {
-  uint64_t checksum_counts[ 0x10000U ];
-  crc_input_t last_inputs[ 0x10000U ];
+  uint64_t checksum_counts[ POSSIBLE_CRC_16_SUMS ];
+  crc_input_t last_inputs[ POSSIBLE_CRC_16_SUMS ];
 }
 crc_16_results_t;
 
@@ -116,12 +115,11 @@ static crc_param_t crc_params = CRC_16_CCITT_FALSE;
 static crc_16_results_t results_16 = { { 0x0000000000000000UL }, 
                                        { { 0x0000000000000000UL } } };
 
-static pthread_mutex_t results_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t threads[ NUM_THREADS ];
 
 static thread_params_t thread_params[ NUM_THREADS ];
 
-static uint64_t hamming_dists[ 52 ] = { 0UL };
+static uint64_t hamming_dists[ HAMMING_DIST_SPACE ] = { 0UL };
 
 static crc_16_pair_t* thread_bufs[ NUM_THREADS ] = { NULL };
 
@@ -152,132 +150,44 @@ static void create_threads( uint32_t* tids );
 static void join_threads( void );
 
 static void synchronize_results( uint32_t tid, uint32_t num_results );
-
-static void calculate_initial_sleep_times( void );
-static struct timespec get_timespec_from_double( double time );
+static void conflate_partial_results( void );
 
 /* *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~ */
 
 
-static struct timespec get_timespec_from_double( double time )
+static void conflate_partial_results( void )
 {
-  struct timespec ts;
-  time_t seconds;
-  long nanoseconds;
-  
-  seconds     = ( time_t )time;
-  nanoseconds = ( ( long )( time * ( double )1000000000U ) ) - 
-                ( ( long )seconds * 1000000000U );
-  ts.tv_sec  = seconds;
-  ts.tv_nsec = nanoseconds;
-
-  return ts;
-}
-
-
-static void calculate_initial_sleep_times( void )
-{
-  crc_input_t crc_input;
-  crc_input_t crc_input_loop;
-  uint16_t crc16 = 0x0000U;
-  crc_16_pair_t* buf = NULL;
-  crc_16_pair_t* cur_pair = NULL;
-  ctimer_t ct_crc;
-  ctimer_t ct_sync;
-  double estimated_crc_time  = .0f;
-  double estimated_sync_time = .0f;
-  double estimated_init_sleep_time = .0f;
-  double time_delta = .0f;
-  uint8_t h;
   uint8_t i;
+  uint32_t j;
+  crc_16_results_t* partial_results = NULL;
+  uint64_t* partial_hamming_dists = NULL;
+  uint32_t hamming_dist;
 
-  ( void )fprintf( stdout, "Please hold the line... Calculating sleep times\n"
-                           "for an optimal pipline processing.\n" );
-  
-  buf = thread_bufs[ 0U ];
-  thread_params[ 0U ].balance_sleep_crc.tv_sec  = 0U;
-  thread_params[ 0U ].balance_sleep_crc.tv_nsec = 0UL;
+  for( i = 0x00U; i < NUM_THREADS; i++ )
+  {
+    partial_results       = &thread_params[ i ].partial_results;
+    partial_hamming_dists = &thread_params[ i ].partial_hamming_dists[ 0U ];
 
-  initCTimer( ct_crc, MONOTONIC );
-  initCTimer( ct_sync, MONOTONIC );
-  
-  for( h = 0x00U; h < NUM_TIME_MESUREMENTS; h++ )
-  {  
-    startCTimer( ct_crc );
-
-    for( crc_input.u_64 = 0UL; crc_input.u_64 < WORKER_BUF_SIZE; crc_input.u_64++ )
+    if( !i )
     {
-      crc_input_loop = crc_input;
-      crc_16_algorithm_func( &crc_input_loop.u_8_arr[ 0U ], 
-                             ( const uint32_t )NUM_INPUT_BYTES,
-                             ( const crc_param_t* )&crc_params, &crc16,
-                             0xFFU,   /* First call, yes */
-                             0x00U ); /* More fragments, no */
-
-      cur_pair = ( buf + crc_input.u_64 );
-      
-      cur_pair->input.u_64 = crc_input.u_64;
-      cur_pair->crc16 = crc16;
-      
-      crc16 = 0x0000U;
+      for( j )
+      results_16.checksum_counts
     }
 
-    stopCTimer( ct_crc );
-    
-    startCTimer( ct_sync );
-    synchronize_results( 0U, WORKER_BUF_SIZE );
-    stopCTimer( ct_sync );
 
-    /* clear these results again. */
-    ( void )memset( ( void* )&results_16, 0x00000000, sizeof( crc_16_results_t ) );
-    ( void )memset( ( void* )&hamming_dists[ 0U ], 0x00000000, sizeof( uint64_t ) * 52 );
 
-    estimated_crc_time  += getCTime( ct_crc );
-    estimated_sync_time += getCTime( ct_sync );
-  }
+    if( results_16.checksum_counts[ cur_pair->crc16 ] )
 
-  if( NUM_TIME_MESUREMENTS )
-  {
-    estimated_crc_time  /= ( double )NUM_TIME_MESUREMENTS;
-    estimated_sync_time /= ( double )NUM_TIME_MESUREMENTS;
-  }
-  else
-  {
-    ( void )fprintf( stderr, "Division by zero, redefine NUM_TIME_MESUREMENTS.\n" );
-    exit( EXIT_FAILURE );
-  }
 
-  estimated_init_sleep_time = MAX( estimated_crc_time, estimated_sync_time );
-  time_delta = estimated_crc_time - estimated_sync_time;
 
-  for( i = 0U; i < NUM_THREADS; i++ )
-  {
-    thread_params[ i ].init_sleep = get_timespec_from_double( estimated_init_sleep_time * i );
-    if( time_delta < .0f )
+    for( j = 0U; j < POSSIBLE_CRC_16_SUMS; j++ )
     {
-      thread_params[ i ].balance_sleep_crc = get_timespec_from_double( time_delta * -1 );
+      if( results_16.checksum_counts[ j ] )
+      {
+      }
     }
-    else
-    {
-      thread_params[ i ].balance_sleep_crc.tv_sec  = 0U;
-      thread_params[ i ].balance_sleep_crc.tv_nsec = 0UL;
-      time_delta = .0f;
-    }
-  }
 
-  ( void )fprintf( stdout, "Estimated mean of buffer fill time on one single core:\n"
-                           "%12.6f seconds\n", estimated_crc_time );
-
-  ( void )fprintf( stdout, "Estimated mean of synchronisatzion time on one single core:\n"
-                           "%12.6f seconds\n", estimated_sync_time );
-  
-  if( time_delta < .0f )
-  {
-    time_delta *= -1;
   }
-  ( void )fprintf( stdout, "Balance time:\n"
-                           "%12.6f seconds\n\n"
-                           "Calculating CRC checksums ...\n", time_delta );
 }
 
 
@@ -289,10 +199,12 @@ static void synchronize_results( uint32_t tid, uint32_t num_results )
   uint8_t add_hamming_dist = 0x00U;
   uint32_t hamming_dist;
   crc_input_t temp_last;
+  crc_16_results_t* partial_results = NULL;
+  uint64_t* partial_hamming_dists = NULL;
 
-  buf = thread_bufs[ tid ];
-  
-  ( void )pthread_mutex_lock( &results_lock );
+  buf                   = thread_bufs[ tid ];
+  partial_results       = &thread_params[ tid ].partial_results;
+  partial_hamming_dists = &thread_params[ tid ].partial_hamming_dists[ 0U ];
 
   for( i = 0U; i < num_results; i++ )
   {
@@ -302,26 +214,24 @@ static void synchronize_results( uint32_t tid, uint32_t num_results )
      * the current crc checksum was already calculated
      * at least once.
      **/
-    if( results_16.checksum_counts[ cur_pair->crc16 ] )
+    if( partial_results->checksum_counts[ cur_pair->crc16 ] )
     {
       add_hamming_dist = 0xFFU;
-      temp_last = results_16.last_inputs[ cur_pair->crc16 ];
+      temp_last = partial_results->last_inputs[ cur_pair->crc16 ];
     }
-    results_16.checksum_counts[ cur_pair->crc16 ]++;
-    results_16.last_inputs[ cur_pair->crc16 ].u_64 = cur_pair->input.u_64;
+    partial_results->checksum_counts[ cur_pair->crc16 ]++;
+    partial_results->last_inputs[ cur_pair->crc16 ].u_64 = cur_pair->input.u_64;
 
     if( add_hamming_dist )
     {
       hamming_dist = ( uint32_t )get_hamming_distance_opt( 
                                    cur_pair->input.u_64, temp_last.u_64 );
 
-      hamming_dists[ hamming_dist ]++;
+      ( *( partial_hamming_dists + hamming_dist ) )++;
     }
 
     add_hamming_dist = 0x00U;
   }
-
-  ( void )pthread_mutex_unlock( &results_lock );
 }
 
 
@@ -359,11 +269,6 @@ static void* crc_16_worker( void* arg )
 
     if( t_buf_idx >= WORKER_BUF_SIZE )
     {
-      if( thread_params[ tid ].balance_sleep_crc.tv_sec ||
-          thread_params[ tid ].balance_sleep_crc.tv_nsec )
-      {
-        ( void )nanosleep( &thread_params[ tid ].balance_sleep_crc, NULL );
-      }
       synchronize_results( tid, t_buf_idx );
       t_buf_idx = 0U;
     }
@@ -387,13 +292,6 @@ static void init( void )
 
   create_thread_params( NUM_THREADS, NUM_INPUTS );
 
-  if( pthread_mutex_init( &results_lock, NULL ) )
-  {
-    ( void )fprintf( stderr, "mutex init failed, exiting ...\n");
-    ( void )fflush( stderr );
-    exit( EXIT_FAILURE );
-  }
-
   /* Function from the crc library gets assigned here.
    * We use the lookup based crc calculation due to
    * performance reasons. */
@@ -413,20 +311,12 @@ static void init( void )
       exit( EXIT_FAILURE );
     }
   }
-  calculate_initial_sleep_times();
 }
 
 
 static void deinit( void )
 {
   uint8_t i;
-
-  if( pthread_mutex_destroy( &results_lock ) ) 
-  {
-    ( void )fprintf( stderr, "mutex destroy failed, exiting ...\n" );
-    ( void )fflush( stderr );
-    exit( EXIT_FAILURE );
-  }
 
   /* free thread buffer space */
   for( i = 0U; i < NUM_THREADS; i++ )
@@ -465,6 +355,12 @@ static void create_thread_params( uint8_t num_threads,
     thread_params[ i ].start = idx_walk;
     idx_walk += part_size;
     thread_params[ i ].end   = idx_walk;
+    
+    /* set all the partial result fields to zero */
+    ( void )memset( ( void* )&thread_params[ i ].partial_results, 
+                    0x00000000, sizeof( crc_16_results_t ) );
+    ( void )memset( ( void* )&thread_params[ i ].partial_hamming_dists[ 0U ], 
+                    0x00000000, sizeof( uint64_t ) * HAMMING_DIST_SPACE );
   }
 }
 
@@ -686,7 +582,13 @@ int main( void )
   ( void )fprintf( stdout, "\n\nCRC calculation time stats:\n" );
   printCTime( ct );
 
+  ( void )fprintf( stdout, "\n\nConflating partial results ...\n" );
+  conflate_partial_results();
+
+  ( void )fprintf( stdout, "\n\nWriting stats files ...\n" );
   file_dump_stats();
+
+  ( void )fprintf( stdout, "\n\nFinished.\n" );
 
   return EXIT_SUCCESS;
 }
