@@ -39,6 +39,8 @@
 #include <crcapi.h>
 #include <hamming.h>
 
+#include <sys/sysinfo.h>
+
 #include <pthread.h>
 #include <assert.h>
 #include <mtimer.h>
@@ -152,6 +154,8 @@ static void join_threads( void );
 static void synchronize_results( uint32_t tid, uint32_t num_results );
 static void conflate_partial_results( void );
 
+static uint64_t get_machine_total_ram( void );
+
 /* *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~ */
 
 
@@ -247,8 +251,6 @@ static void* crc_16_worker( void* arg )
 
   tid = *( ( uint32_t* )arg );
   buf = thread_bufs[ tid ];
-
-  ( void )nanosleep( &thread_params[ tid ].init_sleep, NULL );
 
   for( crc_input.u_64 = thread_params[ tid ].start; 
        crc_input.u_64 < thread_params[ tid ].end; 
@@ -493,6 +495,22 @@ static void close_file( FILE* file )
                      strerror( errno ) );
     exit( EXIT_FAILURE );
   }
+}
+
+
+static uint64_t get_machine_total_ram( void )
+{
+  /*
+   * This function returns the total usable
+   * main memory size given in bytes.
+   * */
+  uint64_t total_ram;
+  struct sysinfo info;
+  
+  ( void )sysinfo( &info );
+  total_ram = ( uint64_t )info.totalram;
+
+  return total_ram;
 }
 
 
